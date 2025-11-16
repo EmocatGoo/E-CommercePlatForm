@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.yyblcc.ecommerceplatforms.mapper.CraftsmanMapper">
+
+    <update id="update" parameterType="com.yyblcc.ecommerceplatforms.domain.po.Craftsman">
+        update tb_craftsman
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="password != null">password = #{password},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="reviewStatus != null">review_status = #{reviewStatus},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="bio != null">bio = #{bio},</if>
+            <if test="workshopName != null">workshopName = #{workshopName},</if>
+            <if test="idNumber != null">id_number = #{idNumber},</if>
+            <if test="updateTime != null">update_time = #{updateTime}</if>
+        </set>
+        where id = #{id}
+    </update>
+
+</mapper>
