@@ -28,8 +28,6 @@ public interface CraftsmanService extends IService<Craftsman> {
 
     Result login(LoginDTO loginDTO, HttpServletRequest request);
 
-    Result signUpWorkShop(Long craftsmanId, WorkShopDTO workShopDTO);
-
     Result<?> getProfile(Long craftsmanId);
 
     Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request);
@@ -39,8 +37,6 @@ public interface CraftsmanService extends IService<Craftsman> {
     Result resetPassword(Long craftsmanId);
 
     Result nameSelect(CraftsmanQuery craftsmanQuery);
-
-    Result setWorkShopStatus(Long craftsmanId, Integer status);
 
     Result<?> checkCraftsmanInfo(String username,String phone);
 

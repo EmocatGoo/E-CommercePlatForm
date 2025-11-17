@@ -1,18 +1,29 @@
 package com.yyblcc.ecommerceplatforms.controller.common;
 
+import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/workshop")
 @Slf4j
+@RequiredArgsConstructor
 public class WorkShopController {
-    @Autowired
-    private WorkShopService workShopService;
 
+    private final WorkShopService workShopService;
+
+    /**
+     * 修改店铺认证状态
+     * @param workshopId
+     * @param status
+     * @return
+     */
     @PutMapping("/review-workshop")
     public Result reviewWorkshop(@RequestParam("workshopId") Long workshopId, @RequestParam("status") Integer status){
         log.info("workshopId={},status={}", workshopId, status);
@@ -55,9 +66,60 @@ public class WorkShopController {
         return workShopService.getWorkShopByCraftsmanId(craftsmanId);
     }
 
+    /**
+     * 获取工作室主页数据
+     * @param id
+     * @return
+     */
+    @GetMapping("/detail/{id}")
+    public Result detail(@PathVariable("id") Long id){
+        log.info("id={}", id);
+        return workShopService.getWorkShopDetail(id);
+    }
+
+    /**
+     * 用户搜索工作室
+     * @param workshopName
+     * @return
+     */
     @GetMapping("/nameselect")
     public Result selectWorkShopName(@RequestParam("workshopName") String workshopName){
         log.info("workshopName={}", workshopName);
         return workShopService.selectWorkShopName(workshopName);
     }
+
+    /**
+     * 匠人申请工作室
+     * @param workShopDTO
+     * @return
+     */
+    @PostMapping("/sign-up")
+    public Result signUpWorkShop(@RequestBody @Validated WorkShopDTO workShopDTO){
+        log.info("workShop={}", workShopDTO);
+//        Long craftsmanId = AuthContext.getUserId();
+        //TODO 测试环境下使用固定ID,记得修改
+        Long craftsmanId = 2L;
+        return workShopService.signUpWorkShop(craftsmanId,workShopDTO);
+    }
+
+    @PutMapping("/update")
+    public Result  updateWorkShop(@RequestBody @Validated WorkShopDTO workShopDTO){
+        log.info("workShop={}", workShopDTO);
+        return workShopService.updateWorkShop(workShopDTO);
+    }
+
+    @PostMapping("/visit/{id}")
+    public Result visitWorkShop(@PathVariable("id") Long id){
+        log.info("id={}", id);
+        return workShopService.visitWorkShop(id);
+    }
+
+    @PutMapping("/set-workshopStatus")
+    public Result working(@RequestParam Integer status){
+//        Long craftsmanId = AuthContext.getUserId();
+        //TODO 测试环境下使用固定ID,记得修改
+        Long craftsmanId = 2L;
+        return workShopService.setWorkShopStatus(craftsmanId,status);
+    }
+
 }

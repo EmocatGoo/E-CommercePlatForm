@@ -1,19 +1,25 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
+import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -113,6 +119,76 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     @Override
+    public Result signUpWorkShop(Long craftsmanId, WorkShopDTO workShopDTO) {
+        if (StringUtils.isBlank(workShopDTO.getWorkshopName())){
+            return Result.error("工作室名称不能为空!");
+        }
+
+        String workshopStr = stringRedisTemplate.opsForValue().get("workshop:craftsman:" + craftsmanId);
+        if (StringUtils.isNotBlank(workshopStr) && !workshopStr.isEmpty()){
+            return Result.error("请勿重复申请！！！");
+        }
+
+        WorkShop existWorkShop = query().eq("craftsman_id", craftsmanId).one();
+        if (existWorkShop != null){
+            WorkShopVO workShopVO = convertToVO(existWorkShop);
+            stringRedisTemplate.opsForValue().set("workshop:craftsman:"+existWorkShop.getCraftsmanId(),JSON.toJSONString(workShopVO),Duration.ofMinutes(10));
+            return Result.error("请勿重复申请！！！");
+        }
+        WorkShop workShop = new WorkShop();
+        BeanUtils.copyProperties(workShopDTO,workShop);
+        workShop.setCraftsmanId(craftsmanId);
+        workShop.setReviewStatus(WorkShopStatusEnum.PENDING.getCode());
+        workShop.setCreateTime(LocalDateTime.now());
+        save(workShop);
+        return Result.success("工作室申请成功!请等待管理员审核!");
+    }
+
+    @Override
+    public Result getWorkShopDetail(Long id) {
+        WorkShop workShop = query().eq("id", id).one();
+        if (workShop == null){
+            return Result.error("未找到工作室信息!");
+        }
+        return Result.success(workShop);
+    }
+
+    @Override
+    public Result visitWorkShop(Long id) {
+        WorkShop workShop = query().eq("id", id).one();
+        if (workShop == null){
+            return Result.error("未找到工作室信息!");
+        }
+        new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getId,id).set(WorkShop::getVisitCount,workShop.getVisitCount() + 1).update();
+        return Result.success();
+    }
+
+    @Override
+    public Result setWorkShopStatus(Long craftsmanId, Integer status) {
+        WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
+        if (workShop == null){
+            return Result.error("未找到对应工作室!");
+        }
+        boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getCraftsmanId, craftsmanId).set(WorkShop::getStatus, status).update();
+        if (success){
+            stringRedisTemplate.keys("workshop:page:*").forEach(key -> stringRedisTemplate.delete(key));
+            return Result.success();
+        }
+        return null;
+    }
+
+    @Override
+    public Result updateWorkShop(WorkShopDTO workShopDTO) {
+        Long craftsmanId = AuthContext.getUserId();
+        WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
+        BeanUtils.copyProperties(workShopDTO,workShop);
+        updateById(workShop);
+        stringRedisTemplate.keys("workshop:page:*").forEach(key -> stringRedisTemplate.delete(key));
+        return Result.success("修改成功!");
+
+    }
+
+    @Override
     public Result selectWorkShopName(String workshopName) {
         List<WorkShopVO> workShopList = query().like("workshop_name", workshopName).list().stream().map(this::convertToVO).toList();
         return Result.success(workShopList);
@@ -126,6 +202,7 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
                 .location(workShop.getLocation())
                 .status(workShop.getStatus())
                 .reviewStatus(workShop.getReviewStatus())
+                .story(workShop.getStory())
                 .build();
     }
 

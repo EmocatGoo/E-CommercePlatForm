@@ -225,31 +225,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         return Result.success(pageBean);
     }
 
-    @Override
-    public Result signUpWorkShop(Long craftsmanId, WorkShopDTO workShopDTO) {
-        if (StringUtils.isBlank(workShopDTO.getWorkshopName())){
-            return Result.error("工作室名称不能为空!");
-        }
 
-        String workshopStr = stringRedisTemplate.opsForValue().get("workshop:craftsman:" + craftsmanId);
-        if (StringUtils.isNotBlank(workshopStr) && !workshopStr.isEmpty()){
-            return Result.error("请勿重复申请！！！");
-        }
-
-        WorkShop existWorkShop = workShopService.query().eq("craftsman_id", craftsmanId).one();
-        if (existWorkShop != null){
-            WorkShopVO workShopVO = workShopServiceImplement.convertToVO(existWorkShop);
-            stringRedisTemplate.opsForValue().set("workshop:craftsman:"+existWorkShop.getCraftsmanId(),JSON.toJSONString(workShopVO),TTL, TimeUnit.MINUTES);
-            return Result.error("请勿重复申请！！！");
-        }
-        WorkShop workShop = new WorkShop();
-        BeanUtils.copyProperties(workShopDTO,workShop);
-        workShop.setCraftsmanId(craftsmanId);
-        workShop.setReviewStatus(WorkShopStatusEnum.PENDING.getCode());
-        workShop.setCreateTime(LocalDateTime.now());
-        workShopService.save(workShop);
-        return Result.success("工作室申请成功!请等待管理员审核!");
-    }
 
     @Override
     public Result<?> getProfile(Long craftsmanId) {
@@ -349,18 +325,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         return Result.success(pageBean);
     }
 
-    @Override
-    public Result setWorkShopStatus(Long craftsmanId, Integer status) {
-        WorkShop workShop = workShopService.query().eq("craftsman_id", craftsmanId).one();
-        if (workShop == null){
-            return Result.error("未找到对应工作室!");
-        }
-        boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getCraftsmanId, craftsmanId).set(WorkShop::getStatus, status).update();
-        if (success){
-            return Result.success();
-        }
-        return null;
-    }
+
 
     @Override
     public Result<?> checkCraftsmanInfo(String username, String phone) {
