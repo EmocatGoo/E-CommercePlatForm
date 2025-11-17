@@ -25,4 +25,7 @@ public interface WorkShopService extends IService<WorkShop> {
     Result setWorkShopStatus(Long craftsmanId, Integer status);
 
     Result updateWorkShop(WorkShopDTO workShopDTO);
+
+    Result collectWorkShop(Long workShopId);
+
 }

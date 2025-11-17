@@ -114,6 +114,13 @@ public class WorkShopController {
         return workShopService.visitWorkShop(id);
     }
 
+    @PostMapping("/collect/{workShopId}")
+    public Result collectWorkShop(@PathVariable("workShopId") Long workShopId){
+        log.info("id={}", workShopId);
+        return workShopService.collectWorkShop(workShopId);
+    }
+
+
     @PutMapping("/set-workshopStatus")
     public Result working(@RequestParam Integer status){
 //        Long craftsmanId = AuthContext.getUserId();

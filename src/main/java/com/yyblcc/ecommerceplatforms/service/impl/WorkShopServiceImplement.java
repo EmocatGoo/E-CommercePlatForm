@@ -1,6 +1,7 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -9,6 +10,7 @@ import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
+import com.yyblcc.ecommerceplatforms.mapper.UserCollectMapper;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
@@ -34,6 +36,8 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private CraftsmanService craftsmanService;
+    @Autowired
+    private UserCollectMapper userCollectMapper;
 
     @Override
     public Result reviewWorkshop(Long workshopId, Integer status) {
@@ -164,6 +168,29 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     @Override
+    public Result collectWorkShop(Long workShopId) {
+        Long userId = AuthContext.getUserId();
+        WorkShop workShop = query().eq("id", workShopId).one();
+        if (userCollectMapper.selectOne(new LambdaQueryWrapper<UserCollect>()
+                .eq(UserCollect::getUserId, userId)
+                .eq(UserCollect::getWorkShopId, workShopId)) == null) {
+            userCollectMapper.insert(UserCollect.builder().userId(userId).workShopId(workShopId).build());
+        } else {
+            new LambdaUpdateChainWrapper<>(userCollectMapper)
+                    .eq(UserCollect::getUserId, userId)
+                    .eq(UserCollect::getWorkShopId, workShopId)
+                    .set(UserCollect::getStatus, 0)
+                    .update();
+        }
+        new LambdaUpdateChainWrapper<>(workShopMapper)
+                .eq(WorkShop::getId,workShopId)
+                .set(WorkShop::getCollectionCount,workShop.getCollectionCount() + 1)
+                .update();
+        return Result.success();
+    }
+
+
+    @Override
     public Result setWorkShopStatus(Long craftsmanId, Integer status) {
         WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
         if (workShop == null){
@@ -187,6 +214,9 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
         return Result.success("修改成功!");
 
     }
+
+
+
 
     @Override
     public Result selectWorkShopName(String workshopName) {
