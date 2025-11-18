@@ -171,16 +171,26 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     public Result collectWorkShop(Long workShopId) {
         Long userId = AuthContext.getUserId();
         WorkShop workShop = query().eq("id", workShopId).one();
-        if (userCollectMapper.selectOne(new LambdaQueryWrapper<UserCollect>()
+        UserCollect userCollect = userCollectMapper.selectOne(new LambdaQueryWrapper<UserCollect>()
                 .eq(UserCollect::getUserId, userId)
-                .eq(UserCollect::getWorkShopId, workShopId)) == null) {
+                .eq(UserCollect::getWorkShopId, workShopId));
+        if (userCollect == null) {
             userCollectMapper.insert(UserCollect.builder().userId(userId).workShopId(workShopId).build());
         } else {
-            new LambdaUpdateChainWrapper<>(userCollectMapper)
-                    .eq(UserCollect::getUserId, userId)
-                    .eq(UserCollect::getWorkShopId, workShopId)
-                    .set(UserCollect::getStatus, 0)
-                    .update();
+            if(userCollect.getStatus() == 1){
+                new LambdaUpdateChainWrapper<>(userCollectMapper)
+                        .eq(UserCollect::getUserId, userId)
+                        .eq(UserCollect::getWorkShopId, workShopId)
+                        .set(UserCollect::getStatus, 0)
+                        .update();
+            }
+            else{
+                new LambdaUpdateChainWrapper<>(userCollectMapper)
+                        .eq(UserCollect::getUserId, userId)
+                        .eq(UserCollect::getWorkShopId, workShopId)
+                        .set(UserCollect::getStatus, 1)
+                        .update();
+            }
         }
         new LambdaUpdateChainWrapper<>(workShopMapper)
                 .eq(WorkShop::getId,workShopId)
@@ -188,7 +198,6 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
                 .update();
         return Result.success();
     }
-
 
     @Override
     public Result setWorkShopStatus(Long craftsmanId, Integer status) {

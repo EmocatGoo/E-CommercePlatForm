@@ -58,7 +58,6 @@ public class ProductController {
         return Result.success();
     }
 
-
     /**
      * 匠人提交商品上架申请
      */
@@ -106,7 +105,6 @@ public class ProductController {
         productService.craftsmanOffline(productId, craftsmanId);
         return Result.success();
     }
-
 
     /**
      * 前台商品详情页（最重要的页面！要富含文化背景）
