@@ -37,7 +37,7 @@ public class CategoryController {
      * @param category
      * @return
      */
-    @PostMapping("/add")
+    @PostMapping
     public Result addCategory(@RequestBody @Validated Category category) {
         log.info("新增分类信息如下：{}", category);
         return categoryService.insertCategory(category);
@@ -48,7 +48,7 @@ public class CategoryController {
      * @param id
      * @return
      */
-    @DeleteMapping("/delete/{id}")
+    @DeleteMapping("/{id}")
     public Result deleteCategory(@PathVariable Long id) {
         log.info("删除的分类ID为：{}",id);
         return categoryService.deleteCategory(id);
@@ -70,9 +70,30 @@ public class CategoryController {
      * @param categoryDTO
      * @return
      */
-    @PutMapping("/update")
+    @PutMapping
     public Result updateCategory(@RequestBody CategoryDTO  categoryDTO) {
         log.info("分类修改的内容如下：{}", categoryDTO);
         return categoryService.updateCategory(categoryDTO);
+    }
+
+    /**
+     * 查询所有分类
+     */
+    @GetMapping
+    public Result<?> getAllCategories() {
+        List<Category> categories = categoryService.list();
+        return Result.success(categories);
+    }
+
+    /**
+     * 根据ID查询分类
+     */
+    @GetMapping("/{id}")
+    public Result<?> getCategoryById(@PathVariable Long id) {
+        Category category = categoryService.getById(id);
+        if (category == null) {
+            return Result.error("未找到该分类");
+        }
+        return Result.success(category);
     }
 }
