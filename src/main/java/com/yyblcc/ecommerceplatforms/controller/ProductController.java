@@ -1,4 +1,4 @@
-package com.yyblcc.ecommerceplatforms.controller.common;
+package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.VO.ProductDetailVO;

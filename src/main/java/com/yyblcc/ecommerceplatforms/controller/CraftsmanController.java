@@ -1,4 +1,4 @@
-package com.yyblcc.ecommerceplatforms.controller.craftsman;
+package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;

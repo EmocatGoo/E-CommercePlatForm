@@ -1,4 +1,4 @@
-package com.yyblcc.ecommerceplatforms.controller.user;
+package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;

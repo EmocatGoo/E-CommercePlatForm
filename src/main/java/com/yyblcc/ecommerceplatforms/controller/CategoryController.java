@@ -1,4 +1,4 @@
-package com.yyblcc.ecommerceplatforms.controller.common;
+package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.CategoryDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Category;
@@ -6,7 +6,6 @@ import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.annotations.Delete;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
