@@ -38,7 +38,7 @@ public class WorkShop {
 
     //短视频
     @TableField(typeHandler = JacksonTypeHandler.class)
-    private List<VideoVO> shorVideos;
+    private List<VideoVO> shortVideos;
 
     //创作故事
     private String story;

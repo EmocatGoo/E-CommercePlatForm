@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
@@ -170,35 +171,19 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     @Override
+    @UpdateBloomFilter
     public Result collectWorkShop(Long workShopId) {
         Long userId = AuthContext.getUserId();
         if (userId == null) {
             throw new BusinessException("请先登录");
         }
-        WorkShop workShop = query().eq("id", workShopId).one();
-        UserCollect userCollect = userCollectMapper.selectOne(new LambdaQueryWrapper<UserCollect>()
-                .eq(UserCollect::getUserId, userId)
-                .eq(UserCollect::getWorkShopId, workShopId)
-                .last("FOR UPDATE"));
-        boolean isCollected;
-        int delta = 0;
-        if (userCollect == null) {
-            userCollectMapper.insert(UserCollect.builder().userId(userId).workShopId(workShopId).build());
-            isCollected = true;
-            delta = 1;
-        } else {
-            Integer status = (userCollect.getStatus() == 1) ? 0 : 1;
-            userCollectMapper.update(null,new LambdaUpdateWrapper<UserCollect>()
-                    .eq(UserCollect::getUserId, userId)
-                    .eq(UserCollect::getWorkShopId, workShopId)
-                    .set(UserCollect::getStatus, status));
-            isCollected = (status == 1);
-            delta = isCollected ?  1 : -1;
-        }
+        userCollectMapper.Collect(userId,workShopId);
+        Integer finalStatus = userCollectMapper.getFinalStatus(userId,workShopId);
+        int delta = (finalStatus == 1) ? 1 : -1;
         workShopMapper.update(null,new LambdaUpdateWrapper<WorkShop>()
                 .eq(WorkShop::getId,workShopId)
-                .set(WorkShop::getCollectionCount,workShop.getCollectionCount() + delta));
-        return Result.success();
+                .setSql("collection_count = collection_count + " + delta));
+        return Result.success(finalStatus == 1 ? "收藏成功" : "取消收藏");
     }
 
     @Override

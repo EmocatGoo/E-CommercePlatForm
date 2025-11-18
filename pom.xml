@@ -38,11 +38,6 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>3.0.4</version>
-        </dependency>
         <!--Mybatis Plus 起步器：自动注册所需要的依赖组件 -->
         <dependency>
             <groupId>com.baomidou</groupId>

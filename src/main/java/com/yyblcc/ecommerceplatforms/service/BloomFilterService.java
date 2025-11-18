@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.service;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.util.redis.CacheClient;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -11,20 +12,16 @@ import java.util.List;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class BloomFilterService {
-    
-    @Autowired
-    private CacheClient cacheClient;
-    @Autowired
-    private UserMapper userMapper;
-    @Autowired
-    private AdminMapper adminMapper;
-    @Autowired
-    private CraftsmanMapper craftsmanMapper;
-    @Autowired
-    private WorkShopMapper workShopMapper;
-    @Autowired
-    private UserAddressMapper userAddressMapper;
+
+    private final CacheClient cacheClient;
+    private final UserMapper userMapper;
+    private final AdminMapper adminMapper;
+    private final CraftsmanMapper craftsmanMapper;
+    private final WorkShopMapper workShopMapper;
+    private final UserAddressMapper userAddressMapper;
+    private final UserCollectMapper userCollectMapper;
 
 
     /**
@@ -58,7 +55,11 @@ public class BloomFilterService {
             List<UserAddress> userAddressList = userAddressMapper.selectList(null);
             userAddressList.forEach(userAddress -> cacheClient.addToBloomFilter(userAddress.getId()));
             log.info("已添加 {} 个地址ID到布隆过滤器", userAddressList.size());
-            
+
+            List<UserCollect> userCollectList = userCollectMapper.selectList(null);
+            userCollectList.forEach(userCollect -> cacheClient.addToBloomFilter(userCollect.getId()));
+            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+
             log.info("布隆过滤器初始化完成");
         } catch (Exception e) {
             log.error("布隆过滤器初始化失败", e);
