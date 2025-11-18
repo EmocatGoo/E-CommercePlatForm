@@ -1,4 +1,4 @@
-package com.yyblcc.ecommerceplatforms.controller.craftsman;
+package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
@@ -9,6 +9,7 @@ import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -18,16 +19,12 @@ import java.util.List;
 @RestController
 @RequestMapping("/craftsman")
 @Slf4j
+@RequiredArgsConstructor
 public class CraftsmanController {
 
 
-    private CraftsmanService craftsmanService;
-    private CraftsmanAuthService craftsmanAuthService;
-
-    CraftsmanController(CraftsmanService craftsmanService,CraftsmanAuthService  craftsmanAuthService) {
-        this.craftsmanService = craftsmanService;
-        this.craftsmanAuthService = craftsmanAuthService;
-    }
+    private final CraftsmanService craftsmanService;
+    private final CraftsmanAuthService craftsmanAuthService;
 
     /**
      * 匠人注册
@@ -135,27 +132,10 @@ public class CraftsmanController {
         return craftsmanService.login(loginDTO,request);
     }
 
-    @PostMapping("/sign-up")
-    public Result signUpWorkShop(@RequestBody WorkShopDTO workShopDTO){
-        log.info("workShop={}", workShopDTO);
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 测试环境下使用固定ID,记得修改
-        Long craftsmanId = 2L;
-        return craftsmanService.signUpWorkShop(craftsmanId,workShopDTO);
-    }
-
     @PutMapping("/resetPassword")
     public Result resetPassword(@RequestParam("craftsmanId") Long craftsmanId){
         log.info("craftsmanId={}", craftsmanId);
         return craftsmanService.resetPassword(craftsmanId);
-    }
-
-    @PutMapping("/set-workshopStatus")
-    public Result working(@RequestParam Integer status){
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 测试环境下使用固定ID,记得修改
-        Long craftsmanId = 2L;
-        return craftsmanService.setWorkShopStatus(craftsmanId,status);
     }
 
     @GetMapping("/nameselect")

@@ -31,9 +31,9 @@ public class Product {
     //商品描述
     private String description;
     //匠人id
-    private Integer craftsmanId;
+    private Long craftsmanId;
     //分类id
-    private Integer categoryId;
+    private Long categoryId;
     //商品上架下架状态
     private Integer status;
     //商品库存

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.yyblcc.ecommerceplatforms.mapper.UserCollectMapper">
+
+
+    <select id="getFinalStatus" resultType="java.lang.Integer">
+        SELECT status
+        FROM tb_user_collection
+        WHERE user_id = #{userId} AND workshop_id = #{workShopId}
+    </select>
+</mapper>
