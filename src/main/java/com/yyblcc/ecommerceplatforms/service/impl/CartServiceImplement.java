@@ -3,18 +3,20 @@ package com.yyblcc.ecommerceplatforms.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.domain.DTO.AddCartDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.CartItemRedis;
 import com.yyblcc.ecommerceplatforms.domain.VO.CartItemVO;
 import com.yyblcc.ecommerceplatforms.domain.VO.CartVO;
 import com.yyblcc.ecommerceplatforms.domain.message.AddCartMessage;
-import com.yyblcc.ecommerceplatforms.domain.message.CheckEvent;
+import com.yyblcc.ecommerceplatforms.domain.message.CartDeleteMessage;
+import com.yyblcc.ecommerceplatforms.domain.message.CheckMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.Cart;
 import com.yyblcc.ecommerceplatforms.domain.po.CartItem;
 import com.yyblcc.ecommerceplatforms.domain.po.Product;
+import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.exception.BusinessException;
 import com.yyblcc.ecommerceplatforms.mapper.CartMapper;
 import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
 import com.yyblcc.ecommerceplatforms.service.CartService;
+import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import lombok.RequiredArgsConstructor;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -23,8 +25,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 @Service
@@ -98,13 +99,13 @@ public class CartServiceImplement extends ServiceImpl<CartMapper, Cart> implemen
         stringRedisTemplate.opsForHash().increment(userKey, "checked_count", delta);
         item.setIsChecked(checked ? 1 : 0);
         stringRedisTemplate.opsForHash().put(itemsKey, itemHashKey, JSON.toJSONString(item));
-        CheckEvent checkEventMessage = CheckEvent.builder()
+        CheckMessage checkMessageMessage = CheckMessage.builder()
                                         .userId(userId)
                                         .productId(productId)
                                         .checked(checked)
                                         .quantity(item.getQuantity())
                                         .build();
-        rocketMQTemplate.asyncSend("cart-check-topic", checkEventMessage, new SendCallback() {
+        rocketMQTemplate.asyncSend("cart-check-topic", checkMessageMessage, new SendCallback() {
             @Override public void onSuccess(SendResult result) { }
             @Override public void onException(Throwable e) {
                 log.error("MQ发送失败",e);
@@ -145,5 +146,90 @@ public class CartServiceImplement extends ServiceImpl<CartMapper, Cart> implemen
                 .checkedCount(checkedCount)
                 .items(cartItemVOS)
                 .build();
+    }
+
+    @Override
+    public Result<?> batchdelete(List<Long> productIds) {
+        if (productIds.isEmpty()) {
+            return Result.error("没有可删除项!");
+        }
+
+        Long userId = AuthContext.getUserId();
+        String userKey = CART_HASH + userId;
+        String itemsKey = CART_ITEMS_HASH + userId;
+
+        List<String> deleteKeys = new ArrayList<>();
+
+        int totalDecrement = 0;
+        int checkedDecrement = 0;
+
+        for (Long productId : productIds) {
+            String itemHashKey = "item:" + productId;
+            String json = (String) stringRedisTemplate.opsForHash().get(itemsKey, itemHashKey);
+            if (json != null){
+                CartItem item = JSON.parseObject(json, CartItem.class);
+                totalDecrement += item.getQuantity();
+                if (item.getIsChecked() == 1) {
+                    checkedDecrement += item.getQuantity();
+                }
+                deleteKeys.add(itemHashKey);
+            }
+        }
+
+        if (!deleteKeys.isEmpty()){
+            stringRedisTemplate.opsForHash().delete(itemsKey, deleteKeys);
+            stringRedisTemplate.opsForHash().increment(userKey,"item_count", -totalDecrement);
+            if (checkedDecrement > 0) {
+                stringRedisTemplate.opsForHash().increment(itemsKey,"checked_count", -checkedDecrement);
+            }
+        }
+        CartDeleteMessage message = CartDeleteMessage.builder()
+                                                    .userId(userId)
+                                                    .productIds(productIds).build();
+        rocketMQTemplate.asyncSend("cart-delete-topic",message,new SendCallback() {
+            @Override public void onSuccess(SendResult result) {
+
+            }
+            @Override public void onException(Throwable e) {
+                log.error("mq消息发送失败!");
+            }
+        });
+
+        return Result.success("删除成功!");
+    }
+
+    @Override
+    public Result<?> delete(Long productId) {
+        Long userId = AuthContext.getUserId();
+        String userKey = CART_HASH + userId;
+        String itemsKey = CART_ITEMS_HASH + userId;
+        String itemHashKey = "item:" + productId;
+        String cartItemCache = (String) stringRedisTemplate.opsForHash().get(itemsKey, itemHashKey);
+        if (cartItemCache == null){
+            return Result.success("");
+        }
+        CartItem cartItem = JSON.parseObject(cartItemCache, CartItem.class);
+        int quantity = cartItem.getQuantity();
+        boolean checked = cartItem.getIsChecked() == 1;
+
+        stringRedisTemplate.opsForHash().delete(itemsKey, itemHashKey);
+        stringRedisTemplate.opsForHash().increment(userKey,"item_count", -quantity);
+        if (checked) {
+            stringRedisTemplate.opsForHash().increment(itemsKey,"checked_count", -quantity);
+        }
+        CartDeleteMessage message = CartDeleteMessage.builder()
+                                                    .userId(userId)
+                                                    .productIds(Collections.singletonList(productId))
+                                                    .build();
+        rocketMQTemplate.asyncSend("cart-delete-topic",message,new SendCallback() {
+            @Override public void onSuccess(SendResult result) {
+
+            }
+            @Override public void onException(Throwable e) {
+                log.error("MQ发送失败",e);
+            }
+        });
+
+        return Result.success("删除成功!");
     }
 }

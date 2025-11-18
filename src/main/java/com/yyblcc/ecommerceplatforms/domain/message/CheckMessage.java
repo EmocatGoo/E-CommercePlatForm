@@ -11,7 +11,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class CheckEvent implements Serializable {
+public class CheckMessage implements Serializable {
     private Long userId;
     private Long productId;
     private Boolean checked;

@@ -1,7 +1,7 @@
 package com.yyblcc.ecommerceplatforms.listener;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.yyblcc.ecommerceplatforms.domain.message.CheckEvent;
+import com.yyblcc.ecommerceplatforms.domain.message.CheckMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.Cart;
 import com.yyblcc.ecommerceplatforms.domain.po.CartItem;
 import com.yyblcc.ecommerceplatforms.mapper.CartItemMapper;
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ToggleCheckListener implements RocketMQListener<CheckEvent> {
+public class ToggleCheckListener implements RocketMQListener<CheckMessage> {
 
     private final CartItemMapper cartItemMapper;
     private final CartMapper cartMapper;
@@ -32,16 +32,16 @@ public class ToggleCheckListener implements RocketMQListener<CheckEvent> {
     //6.已勾选，将需要删减的数量赋值给delta变量，随后再更新checked状态
     //7.根据数量是否变化，更新购物车的checked_count字段
     @Override
-    public void onMessage(CheckEvent checkEvent) {
-        Long userId = checkEvent.getUserId();
-        Long productId = checkEvent.getProductId();
-        boolean checked = checkEvent.getChecked();
-        int quantity = checkEvent.getQuantity();
+    public void onMessage(CheckMessage checkMessage) {
+        Long userId = checkMessage.getUserId();
+        Long productId = checkMessage.getProductId();
+        boolean checked = checkMessage.getChecked();
+        int quantity = checkMessage.getQuantity();
         int delta;
         try{
             CartItem item = cartItemMapper.selectOne(Wrappers.<CartItem>lambdaQuery()
-                    .eq(CartItem::getUserId, checkEvent.getUserId())
-                    .eq(CartItem::getProductId, checkEvent.getProductId()));
+                    .eq(CartItem::getUserId, checkMessage.getUserId())
+                    .eq(CartItem::getProductId, checkMessage.getProductId()));
             if (item == null) {
                 log.warn("用户 {} 的购物车中未找到商品 {}，可能已被删除，忽略本次勾选操作", userId, productId);
                 return;

@@ -8,8 +8,11 @@ import com.yyblcc.ecommerceplatforms.service.CartService;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.annotations.Delete;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/cart")
@@ -23,7 +26,7 @@ public class CartController {
     /**
      * 加入购物车
      */
-    @PostMapping("")
+    @PostMapping
     public Result<?> add(@RequestBody @Validated AddCartDTO dto) {
         // 从 token 取
         Long userId = AuthContext.getUserId();
@@ -48,5 +51,17 @@ public class CartController {
     public Result<CartVO> list() {
         Long userId = AuthContext.getUserId();
         return Result.success(cartService.getMyCart(userId));
+    }
+
+    @DeleteMapping("/batch")
+    public Result<?> delete(@RequestParam("productIds") List<Long> productIds) {
+        log.info("传入的购物车项id集合为：{}",productIds);
+        return cartService.batchdelete(productIds);
+    }
+
+    @DeleteMapping()
+    public Result<?> delete(@RequestParam("productId")Long productId) {
+        log.info("删除的商品id为：{}",productId);
+        return cartService.delete(productId);
     }
 }
