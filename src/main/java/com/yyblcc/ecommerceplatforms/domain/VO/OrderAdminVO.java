@@ -32,7 +32,7 @@ public class OrderAdminVO {
     // 支付状态
     private Integer payStatus;
     // 支付方式
-    private String paymentMethod;
+    private Integer paymentMethod;
     // 支付时间
     private LocalDateTime payTime;
     // 收货人
@@ -49,5 +49,5 @@ public class OrderAdminVO {
     private LocalDateTime createTime;
     private String remark;
     // 订单明细
-    private List<OrderAdminItemVO> items;
+    private List<OrderItemAdminVO> items;
 }

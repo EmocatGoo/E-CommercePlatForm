@@ -1,0 +1,24 @@
+package com.yyblcc.ecommerceplatforms.domain.VO;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data
+@Builder
+public class OrderUserVO {
+    private String orderSn;
+    private BigDecimal totalAmount;
+
+    private Integer orderStatus;
+    private LocalDateTime createTime;
+    private LocalDateTime payTime;
+
+    private String expressCompany;
+    private String expressNo;
+
+    private List<OrderItemUserVO> items;
+}

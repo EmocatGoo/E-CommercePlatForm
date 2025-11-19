@@ -103,7 +103,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
 
         Product product = new Product();
         BeanUtils.copyProperties(dto, product);
-        product.setCraftsmanId(craftsmanId.intValue());
+        product.setCraftsmanId(craftsmanId);
         // 提交即待审核
         product.setReviewStatus(ProductStatusEnum.PENDING.getCode());
         product.setStatus(ProductStatusEnum.OFFLINE.getCode());

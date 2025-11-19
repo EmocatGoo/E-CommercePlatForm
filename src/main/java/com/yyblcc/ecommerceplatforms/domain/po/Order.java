@@ -35,7 +35,7 @@ public class Order {
     //平台抽成（默认每件商品单价5% 累计）
     private BigDecimal platformCommission;
     //支付方式 0支付宝 1微信支付 2余额支付
-    private Integer payMethod;
+    private Integer paymentMethod;
     //支付时间
     private LocalDateTime payTime;
     //收货地址

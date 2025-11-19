@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 
 @Data
 @Builder
-public class OrderAdminItemVO {
+public class OrderItemAdminVO {
     //商品id
     private Long productId;
     //商品名称
