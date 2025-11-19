@@ -14,4 +14,5 @@ public class OrderDTO {
     private String district;
     private String detailAddress;
     private String remark;
+    private Integer fromCart;
 }

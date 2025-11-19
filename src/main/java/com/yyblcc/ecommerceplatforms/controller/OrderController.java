@@ -10,10 +10,7 @@ import com.yyblcc.ecommerceplatforms.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/order")
@@ -42,7 +39,7 @@ public class OrderController {
     }
 
     @PostMapping
-    public Result createOrder(@Validated OrderDTO orderDTO){
+    public Result createOrder(@RequestBody @Validated OrderDTO orderDTO){
         log.info("初始化订单:{}",orderDTO);
         return orderService.createOrder(orderDTO);
     }

@@ -81,6 +81,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         Craftsman craftsman =Craftsman.builder()
                 //设置账号固定前缀
                 .username(username)
+                //设置匠人名称
+                .name(craftsmanDTO.getName())
                 //设置账号为待审核
                 .status(StatusConstant.WAITING_REVIEW)
                 //设置密码
