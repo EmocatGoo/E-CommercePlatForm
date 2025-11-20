@@ -26,6 +26,10 @@ public class Order {
     private Long craftsmanId;
     //订单状态 0待支付 1待发货 2待收货 3待评价 4退款/售后
     private Integer orderStatus;
+    //支付id
+    private Long payId;
+    //支付单号
+    private String paySn;
     //支付状态 0未支付 1已支付 2已取消
     private Integer payStatus;
     //订单总金额

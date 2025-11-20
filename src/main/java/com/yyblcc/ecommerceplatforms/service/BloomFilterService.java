@@ -22,6 +22,9 @@ public class BloomFilterService {
     private final WorkShopMapper workShopMapper;
     private final UserAddressMapper userAddressMapper;
     private final UserCollectMapper userCollectMapper;
+    private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
+    private final ProductMapper productMapper;
 
 
     /**
@@ -58,6 +61,18 @@ public class BloomFilterService {
 
             List<UserCollect> userCollectList = userCollectMapper.selectList(null);
             userCollectList.forEach(userCollect -> cacheClient.addToBloomFilter(userCollect.getId()));
+            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+
+            List<Order> orderList = orderMapper.selectList(null);
+            orderList.forEach(order -> cacheClient.addToBloomFilter(order.getId()));
+            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+
+            List<Product> productList = productMapper.selectList(null);
+            productList.forEach(product -> cacheClient.addToBloomFilter(product.getId()));
+            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+
+            List<OrderItem> orderItemList = orderItemMapper.selectList(null);
+            orderItemList.forEach(orderItem -> cacheClient.addToBloomFilter(orderItem.getId()));
             log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
 
             log.info("布隆过滤器初始化完成");

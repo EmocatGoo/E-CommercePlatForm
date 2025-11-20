@@ -253,7 +253,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             }
             
             return Result.success(CreateOrderVO.builder()
-                    .orderSn(orderSnList.getFirst())
+                    .orderSn(orderSnList)
                     .totalAmount(overallTotalAmount)
                     .createTime(LocalDateTime.now())
                     .build());
