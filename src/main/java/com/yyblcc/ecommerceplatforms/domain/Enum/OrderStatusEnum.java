@@ -7,11 +7,12 @@ import lombok.Getter;
 @Getter
 public enum OrderStatusEnum {
     PENDING(0,"待支付"),
-    BERECEIPT(1,"待发货"),
-    BEDISPATCH(2,"待收货"),
-    BEEVALUATE(3,"待评价"),
+    DISPATCH(1,"待发货"),
+    RECEIPT(2,"待收货"),
+    BEEVALUATED(3,"待评价"),
     REFUND(4,"退款/售后"),
-    CANCEL(5,"取消");
+    CANCEL(5,"取消"),
+    EVALUATED(6,"已评价");
 
     @EnumValue
     private final int code;

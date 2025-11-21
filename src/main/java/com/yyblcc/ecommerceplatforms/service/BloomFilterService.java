@@ -25,6 +25,7 @@ public class BloomFilterService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
     private final ProductMapper productMapper;
+    private final PaymentMapper paymentMapper;
 
 
     /**
@@ -65,15 +66,19 @@ public class BloomFilterService {
 
             List<Order> orderList = orderMapper.selectList(null);
             orderList.forEach(order -> cacheClient.addToBloomFilter(order.getId()));
-            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+            log.info("已添加 {} 个订单ID到布隆过滤器", orderList.size());
 
             List<Product> productList = productMapper.selectList(null);
             productList.forEach(product -> cacheClient.addToBloomFilter(product.getId()));
-            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+            log.info("已添加 {} 个商品ID到布隆过滤器", productList.size());
 
             List<OrderItem> orderItemList = orderItemMapper.selectList(null);
             orderItemList.forEach(orderItem -> cacheClient.addToBloomFilter(orderItem.getId()));
-            log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+            log.info("已添加 {} 个订单项ID到布隆过滤器", orderItemList.size());
+
+            List<Payment> paymentList = paymentMapper.selectList(null);
+            paymentList.forEach(payment -> cacheClient.addToBloomFilter(payment.getId()));
+            log.info("已添加 {} 个支付ID到布隆过滤器",paymentList.size());
 
             log.info("布隆过滤器初始化完成");
         } catch (Exception e) {

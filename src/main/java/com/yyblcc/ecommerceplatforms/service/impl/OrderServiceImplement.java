@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -7,13 +8,16 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.OrderDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.OrderItemDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.OrderStatsuDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.UserSignUpRefundDTO;
+import com.yyblcc.ecommerceplatforms.domain.Enum.OrderStatusEnum;
+import com.yyblcc.ecommerceplatforms.domain.Enum.RefundEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.*;
 import com.yyblcc.ecommerceplatforms.domain.message.CartDeleteMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.OrderQuery;
 import com.yyblcc.ecommerceplatforms.exception.BusinessException;
-import com.yyblcc.ecommerceplatforms.mapper.OrderMapper;
-import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
+import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.service.*;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.id.OrderSnGenerator;
@@ -28,10 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,7 +49,11 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     private final ProductMapper productMapper;
     private final OrderSnGenerator orderSnGenerator;
     private final RocketMQTemplate rocketMQTemplate;
+    private final PaymentMapper paymentMapper;
     private static final String DELETE_CART_TOPIC = "cart-delete-topic";
+    private final OrderItemMapper orderItemMapper;
+    private final UserMapper userMapper;
+    private final RefundMapper refundMapper;
 
 
     @Override
@@ -86,10 +91,16 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     public Result<PageBean> pageUserOrders(OrderQuery orderQuery) {
 //        Long userId = AuthContext.getUserId();
         Long userId = 4L;
+        List<Payment> paymentList = paymentMapper.selectList(new LambdaQueryWrapper<Payment>()
+                .eq(Payment::getUserId, userId)
+                .orderByAsc(Payment::getCreateTime)
+                .last("FOR UPDATE"));
+        List<String> paySnList = paymentList.stream().map(Payment::getMergePaySn).toList();
         Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()),
                 new LambdaQueryWrapper<Order>()
                         .eq(Order::getUserId, userId)
-                        .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
+                        .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
+                        .in(Order::getPaySn, paySnList)
                         .orderByAsc(Order::getCreateTime));
         List<OrderUserVO> orderUserVOList = orderPage.getRecords().stream()
                 .map(this::convertToOrderUserVO)
@@ -235,7 +246,6 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             
             // MQ异步删除购物车内容 - 使用fromCart字段明确判断订单来源
             try {
-                // 只有当fromCart为1时才发送删除购物车消息
                 if (orderDTO.getFromCart() != null && orderDTO.getFromCart() == 1) {
                     CartDeleteMessage message = CartDeleteMessage.builder()
                             .userId(userId)
@@ -268,6 +278,132 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result userUpdateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
+        String paySn = orderStatsuDTO.getPaySn();
+        Long userId = AuthContext.getUserId();
+
+        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                .eq(Order::getUserId, userId)
+                .eq(Order::getPaySn, paySn)
+                .in(Order::getOrderStatus,
+                        OrderStatusEnum.RECEIPT.getCode(),OrderStatusEnum.BEEVALUATED.getCode())
+                .orderByDesc(Order::getCreateTime)
+                .last("FOR UPDATE"));
+
+        if (CollUtil.isEmpty(orders)) {
+            throw new BusinessException("订单状态异常或无权操作");
+        }
+
+        //防越权修改
+        for (Order order : orders) {
+            if (orderStatsuDTO.getStatus().equals(OrderStatusEnum.BEEVALUATED.getCode())) {
+                if (!order.getOrderStatus().equals(OrderStatusEnum.RECEIPT.getCode())) {
+                    throw new RuntimeException("不是已发货订单不可确认收货哦");
+                }
+            } else if (orderStatsuDTO.getStatus().equals(OrderStatusEnum.EVALUATED.getCode())) {
+                if (!order.getOrderStatus().equals(OrderStatusEnum.BEEVALUATED.getCode())) {
+                    throw new RuntimeException("不是已收货订单不可进行评价哦");
+                }
+            }
+        }
+
+        orders.forEach(order -> {
+            order.setOrderStatus(orderStatsuDTO.getStatus());
+            orderMapper.updateById(order);
+        });
+
+        return Result.success();
+    }
+
+    @Override
+    public Result updateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
+        String paySn = orderStatsuDTO.getPaySn();
+        Long craftsmanId = AuthContext.getUserId();
+        String expressNo = orderStatsuDTO.getExpressNo();
+        String expressCompany = orderStatsuDTO.getExpressCompany();
+
+        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                .eq(Order::getCraftsmanId, craftsmanId)
+                .eq(Order::getPaySn, paySn)
+                .eq(Order::getOrderStatus, OrderStatusEnum.DISPATCH.getCode())
+                .orderByDesc(Order::getCreateTime)
+                .last("FOR UPDATE"));
+
+        if (CollUtil.isEmpty(orders)) {
+            throw new BusinessException("订单状态异常或无权操作");
+        }
+
+        for (Order order : orders) {
+            if (orderStatsuDTO.getStatus().equals(OrderStatusEnum.RECEIPT.getCode())) {
+                if (!order.getOrderStatus().equals(OrderStatusEnum.DISPATCH.getCode())) {
+                    throw new RuntimeException("非待发货订单不可修改发货状态");
+                }
+            }
+        }
+
+        orders.forEach(order -> {
+            order.setOrderStatus(orderStatsuDTO.getStatus());
+            order.setExpressNo(expressNo);
+            order.setExpressCompany(expressCompany);
+            orderMapper.updateById(order);
+        });
+
+        return Result.success();
+    }
+
+    @Override
+    public Result signUpRefund(UserSignUpRefundDTO userSignUpRefundDTO) {
+        //用户通过自己的订单记录选择退款项目，指定退款物，可以获得需退款商品的productId;会给前端返回paySn，通过paySn找到订单集合orders，通过orders再查找orderItem，具体是利用ordetItemMapper，指定eq为userId,productId,in（orders）。
+        //orderItem下有refund实体需要的orderId,orderSn,userId,craftsmanId,productId,productName,productImage,quantity,totalAmount->refundAmount
+        String paySn = userSignUpRefundDTO.getPaySn();
+        Long userId = AuthContext.getUserId();
+        Long productId = userSignUpRefundDTO.getProductId();
+        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                .eq(Order::getPaySn, paySn)
+                .eq(Order::getUserId, userId)
+                .orderByDesc(Order::getCreateTime)
+                .last("FOR UPDATE"));
+
+        if (CollUtil.isEmpty(orders)) {
+            throw new BusinessException("订单查询发生异常，退款失败");
+        }
+        //退款情况，1、未发货 2、未收货（运输中）3、待评价（已收货）4、已评价 ，也就是均可发起退款申请，但是具体需要匠人通过
+        List<String> orderSnList = orders.stream().map(Order::getOrderSn).toList();
+
+        if (CollUtil.isEmpty(orderSnList)) {
+            throw new BusinessException("未找到对应订单，退款失败");
+        }
+
+        OrderItem orderItem = orderItemMapper.selectOne(new LambdaQueryWrapper<OrderItem>()
+                .eq(OrderItem::getProductId, productId)
+                .eq(OrderItem::getUserId, userId)
+                .in(OrderItem::getOrderSn, orderSnList));
+
+        if (orderItem == null) {
+            throw new BusinessException("未找到对应订单项，退款失败");
+        }
+
+        refundMapper.insert(Refund.builder()
+                .orderId(orderItem.getOrderId())
+                .orderSn(orderItem.getOrderSn())
+                .orderItemId(orderItem.getId())
+                .userId(orderItem.getUserId())
+                .craftsmanId(orderItem.getCraftsmanId())
+                .productId(orderItem.getProductId())
+                .productName(orderItem.getProductName())
+                .productImage(orderItem.getProductImage())
+                .quantity(orderItem.getQuantity())
+                .refundAmount(orderItem.getTotalAmount())
+                .applyReason(userSignUpRefundDTO.getRefundReason())
+                .applyDesc(userSignUpRefundDTO.getRefundDesc())
+                .refundType(userSignUpRefundDTO.getRefundType())
+                .refundStatus(RefundEnum.APPLY.getCode())
+                .build());
+        return Result.success("已申请退款，请等待商家审核");
+    }
+
     private OrderUserVO convertToOrderUserVO(Order order) {
         List<OrderItem> orderItems = orderItemService.list(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getOrderId, order.getId()));
@@ -276,7 +412,6 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .toList();
 
         return OrderUserVO.builder()
-                .orderSn(order.getOrderSn())
                 .orderStatus(order.getOrderStatus())
                 .totalAmount(order.getTotalAmount())
                 .createTime(order.getCreateTime())

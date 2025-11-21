@@ -8,7 +8,8 @@ import lombok.Getter;
 public enum PayStatusEnum {
     PENDING(0,"待支付"),
     PAYED(1,"已支付"),
-    CANCEL(2,"已取消");
+    CANCEL(2,"已取消"),
+    REFUND(3,"已退款");
 
     @EnumValue
     private final int code;

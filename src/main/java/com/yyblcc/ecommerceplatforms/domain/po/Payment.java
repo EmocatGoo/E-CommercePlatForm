@@ -36,6 +36,8 @@ public class Payment {
     private LocalDateTime payTime;
     //支付过期时间
     private LocalDateTime expireTime;
+    //交易号
+    private String tradeNo;
 
     @TableLogic
     private Integer isDeleted;

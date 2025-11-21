@@ -179,7 +179,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     private AlipayTradePrecreateResponse createAlipayPreOrder(String mergePaySn, BigDecimal amount) throws Exception {
         initAlipayClient();
         AlipayTradePrecreateResponse response = Factory.Payment.FaceToFace()
-                .preCreate("Emall订单", mergePaySn, amount.toPlainString());
+                .preCreate("非遗技艺传承电商平台订单支付", mergePaySn, amount.toPlainString());
         return response;
     }
 
@@ -291,6 +291,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
 
                 // 更新支付单
                 payment.setPayStatus(PayStatusEnum.PAYED.getCode());
+                payment.setTradeNo(aliResp.getTradeNo());
                 payment.setPayTime(LocalDateTime.now());
                 paymentMapper.updateById(payment);
 
@@ -298,10 +299,11 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                 orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                         .in(Order::getOrderSn, orderSn)
                         .set(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
-                        .set(Order::getOrderStatus, OrderStatusEnum.BERECEIPT.getCode())
+                        .set(Order::getOrderStatus, OrderStatusEnum.DISPATCH.getCode())
                 );
 
                 log.info("支付成功，支付宝交易号：{}，合并支付单：{}", aliResp.getTradeNo(), paySn);
+
                 return Result.success("支付成功");
             }
 
@@ -350,145 +352,157 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     // 1. 查询订单信息
     // 2. 验证所有订单属于同一支付记录
     // 3. 调用支付宝退款API
     // 4. 更新订单状态为已退款
     // 5. 更新支付状态为已退款
+    //TODO 待修复
     public Result<String> refund(List<String> orderSn) {
-        if (orderSn == null || orderSn.isEmpty()) {
+        if (CollUtil.isEmpty(orderSn)) {
             return Result.error("订单号列表不能为空");
         }
+        try{
+            List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                    .in(Order::getOrderSn, orderSn)
+                    .eq(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
+            );
 
-        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                .in(Order::getOrderSn, orderSn)
-                .eq(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
-        );
-
-        if (orders.isEmpty()) {
-            return Result.error("未找到可退款订单");
-        }
-
-        String paySn = orders.getFirst().getPaySn();
-        if (orders.stream().anyMatch(order -> !order.getPaySn().equals(paySn))) {
-            return Result.error("订单不属于同一支付记录，无法批量退款");
-        }
-
-        // 查询支付记录获取退款金额
-        Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
-                .eq(Payment::getMergePaySn, paySn)
-        );
-        if (payment == null) {
-            return Result.error("支付记录不存在");
-        }
-
-        try {
-            // 初始化支付宝客户端
-            initAlipayClient();
-            
-            // 调用支付宝退款API
-            String refundAmount = payment.getTotalAmount().toPlainString();
-            String refundReason = "用户申请退款";
-            String outRequestNo = paySnGenerator.generatePaySn(orders.getFirst().getUserId()) + "_REFUND";
-            
-            AlipayTradeRefundResponse response = Factory.Payment.Common()
-                    .refund(paySn, refundAmount);
-            
-            if (ResponseChecker.success(response)) {
-                log.info("支付宝退款成功，支付单号：{}，退款金额：{}", paySn, refundAmount);
-                
-                // 更新订单状态为已退款，由于PayStatusEnum中没有REFUND状态，使用CANCEL状态表示退款
-                orders.forEach(order -> {
-                    order.setOrderStatus(OrderStatusEnum.CANCEL.getCode());
-                    order.setPayStatus(PayStatusEnum.CANCEL.getCode());
-                    order.setCancelTime(LocalDateTime.now());
-                    order.setCancelReason(refundReason);
-                    orderMapper.updateById(order);
-                });
-                
-                // 更新支付状态为已退款，由于PayStatusEnum中没有REFUND状态，使用CANCEL状态表示退款
-                payment.setPayStatus(PayStatusEnum.CANCEL.getCode());
-                paymentMapper.updateById(payment);
-                
-                return Result.success("退款成功");
-            } else {
-                log.error("支付宝退款失败：{}，错误码：{}", response.msg, response.subCode);
-                return Result.error("退款失败：" + response.msg);
+            if (orders.isEmpty()) {
+                return Result.error("未找到可退款订单");
             }
-        } catch (Exception e) {
-            log.error("支付宝退款异常：{}，支付单号：{}", e.getMessage(), paySn, e);
-            return Result.error("退款处理异常：" + e.getMessage());
+
+            String paySn = orders.getFirst().getPaySn();
+            if (orders.stream().anyMatch(order -> !order.getPaySn().equals(paySn))) {
+                return Result.error("订单不属于同一支付记录，无法批量退款");
+            }
+
+            // 查询支付记录获取退款金额
+            Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
+                    .eq(Payment::getMergePaySn, paySn)
+                    .eq(Payment::getPayStatus, PayStatusEnum.PAYED.getCode())
+                    .last("FOR UPDATE")
+            );
+
+            if (payment == null) {
+                return Result.error("支付记录不存在或已退款");
+            }
+
+            BigDecimal refundAmount = orders.stream()
+                    .map(Order::getTotalAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            if (refundAmount.compareTo(payment.getTotalAmount()) != 0){
+                return Result.error("退款金额异常");
+            }
+            String refundSn = "REFUND" + "-" + paySn;
+            initAlipayClient();
+            String refundReason = "用户申请退款";
+            AlipayTradeRefundResponse response = Factory.Payment.Common()
+                    .optional("refund_reason",refundReason)
+                    .optional("out_request_no",refundSn)
+                    .refund(paySn,refundAmount.toPlainString());
+
+            if (!ResponseChecker.success(response)) {
+                log.error("支付宝退款失败: paySn={},refundSn={},code={},subCode={},msg={}",
+                        paySn, refundSn,response.getCode(), response.getSubCode(), response.getSubMsg());
+                return Result.error("退款失败：" + response.getSubMsg());
+            }
+
+            payment.setPayStatus(PayStatusEnum.REFUND.getCode());
+            paymentMapper.updateById(payment);
+
+            orderMapper.update(null,new LambdaUpdateWrapper<Order>()
+                    .in(Order::getOrderSn, orderSn)
+                    .set(Order::getPayStatus, PayStatusEnum.REFUND.getCode())
+                    .set(Order::getOrderStatus, OrderStatusEnum.REFUND.getCode())
+                    .set(Order::getCancelTime, LocalDateTime.now())
+                    .set(Order::getCancelReason,refundReason));
+
+            log.info("退款成功 paySn={} refundSn={} amount={} orders={}",
+                    paySn, refundSn, refundAmount, orderSn);
+
+            return Result.success("退款成功,预计1-7个工作日内到账");
+
+        }catch (Exception e){
+            log.error("退款异常 orderSn={}", orderSn, e);
+            throw new RuntimeException("退款处理失败",e);
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Result<String> closeOrder(List<String> orderSn) {
-        if (orderSn == null || orderSn.isEmpty()) {
+        if (CollUtil.isEmpty(orderSn)) {
             return Result.error("订单号列表不能为空");
         }
+        try{
+            // 1. 查询订单信息
+            List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                    .in(Order::getOrderSn, orderSn)
+                    .eq(Order::getPayStatus, PayStatusEnum.PENDING.getCode())
+                    .last("FOR UPDATE")
+            );
 
-        // 1. 查询订单信息
-        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                .in(Order::getOrderSn, orderSn)
-                .eq(Order::getPayStatus, PayStatusEnum.PENDING.getCode())
-        );
-
-        if (orders.isEmpty()) {
-            return Result.error("未找到待支付订单");
-        }
-
-        String paySn = orders.getFirst().getPaySn();
-        if (orders.stream().anyMatch(order -> !order.getPaySn().equals(paySn))) {
-            return Result.error("订单不属于同一支付记录，无法批量关闭");
-        }
-
-        boolean alipayCloseSuccess = true;
-        
-        // 2. 如果有支付记录，调用支付宝关闭订单API
-        if (paySn != null) {
-            try {
-                initAlipayClient();
-                AlipayTradeCloseResponse response = Factory.Payment.Common().close(paySn);
-                
-                if (!ResponseChecker.success(response)) {
-                    log.error("支付宝关闭订单失败：{}，错误码：{}", response.msg, response.subCode);
-                    alipayCloseSuccess = false;
-                } else {
-                    log.info("支付宝关闭订单成功，支付单号：{}", paySn);
-                }
-            } catch (Exception e) {
-                log.error("支付宝关闭订单异常：{}，支付单号：{}", e.getMessage(), paySn, e);
-                alipayCloseSuccess = false;
+            if (orders.isEmpty()) {
+                return Result.error("未找到待支付订单");
             }
-        }
+            if (orders.size() != orderSn.size()) {
+                return Result.error("部分订单不可取消");
+            }
 
-        // 关闭订单
-        orders.forEach(order -> {
-            order.setOrderStatus(OrderStatusEnum.CANCEL.getCode());
-            order.setPayStatus(PayStatusEnum.CANCEL.getCode());
-            order.setCancelTime(LocalDateTime.now());
-            order.setCancelReason("用户主动取消订单");
-            orderMapper.updateById(order);
-        });
+            String paySn = orders.getFirst().getPaySn();
+            if (StringUtils.isBlank(paySn)) {
+                return Result.error("订单未创建支付，无法取消");
+            }
 
-        // 4. 更新支付状态
-        if (paySn != null) {
+            if (orders.stream().anyMatch(order -> !order.getPaySn().equals(paySn))) {
+                return Result.error("订单不属于同一支付记录，无法批量关闭");
+            }
             Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
                     .eq(Payment::getMergePaySn, paySn)
-            );
-            if (payment != null) {
-                payment.setPayStatus(PayStatusEnum.CANCEL.getCode());
-                paymentMapper.updateById(payment);
+                    .eq(Payment::getPayStatus,PayStatusEnum.PENDING.getCode())
+                    .last("FOR UPDATE"));
+            if (payment == null) {
+                return Result.error("支付记录不存在");
             }
-        }
 
-        log.info("订单关闭成功，订单号：{}", orderSn);
-        
-        if (alipayCloseSuccess) {
-            return Result.success("订单关闭成功");
-        } else {
-            // 即使支付宝关闭失败，也返回成功，因为本地状态已经更新
-            return Result.success("订单本地关闭成功");
+            boolean aliPayClosed = true;
+
+            if (StringUtils.isNotBlank(paySn)) {
+                try {
+                    initAlipayClient();
+                    AlipayTradeCloseResponse response = Factory.Payment.Common().close(paySn);
+
+                    if (!ResponseChecker.success(response)) {
+                        log.error("支付宝关闭订单失败: {},code = {}",response.getMsg(),response.getCode());
+                        return Result.error("支付宝订单出现异常，取消失败");
+                    }
+                    log.info("支付宝关闭订单成功: {} ,code = {}",response.getMsg(),response.getCode());
+                } catch (Exception e) {
+                    log.error("支付宝接口异常 paySn={}",paySn, e);
+                    aliPayClosed = false;
+                }
+            }
+            if (!aliPayClosed) {
+                throw new RuntimeException("支付宝订单关闭失败，取消终止");
+            }
+            payment.setPayStatus(PayStatusEnum.CANCEL.getCode());
+            paymentMapper.updateById(payment);
+
+            orders.forEach(order -> {
+                order.setPayStatus(PayStatusEnum.CANCEL.getCode());
+                order.setOrderStatus(OrderStatusEnum.CANCEL.getCode());
+                order.setCancelTime(LocalDateTime.now());
+                order.setCancelReason("用户主动取消订单");
+                orderMapper.updateById(order);
+            });
+            log.info("订单取消成功 paySn={} orders={}",paySn,orders);
+            return Result.success("取消成功");
+        }catch (Exception e){
+            log.error("支付宝关闭订单异常：{}", e.getMessage());
+            throw new RuntimeException("取消失败",e);
         }
     }
 }

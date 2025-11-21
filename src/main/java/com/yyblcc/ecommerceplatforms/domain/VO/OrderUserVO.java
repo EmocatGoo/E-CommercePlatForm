@@ -10,9 +10,8 @@ import java.util.List;
 @Data
 @Builder
 public class OrderUserVO {
-    private String orderSn;
     private BigDecimal totalAmount;
-
+    private String paySn;
     private Integer orderStatus;
     private LocalDateTime createTime;
     private LocalDateTime payTime;
