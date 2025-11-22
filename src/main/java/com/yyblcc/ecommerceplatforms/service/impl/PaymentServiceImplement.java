@@ -291,7 +291,6 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
 
                 // 更新支付单
                 payment.setPayStatus(PayStatusEnum.PAYED.getCode());
-                payment.setTradeNo(aliResp.getTradeNo());
                 payment.setPayTime(LocalDateTime.now());
                 paymentMapper.updateById(payment);
 
@@ -358,7 +357,6 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     // 3. 调用支付宝退款API
     // 4. 更新订单状态为已退款
     // 5. 更新支付状态为已退款
-    //TODO 待修复
     public Result<String> refund(List<String> orderSn) {
         if (CollUtil.isEmpty(orderSn)) {
             return Result.error("订单号列表不能为空");

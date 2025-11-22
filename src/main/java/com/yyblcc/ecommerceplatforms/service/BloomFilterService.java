@@ -26,6 +26,7 @@ public class BloomFilterService {
     private final OrderItemMapper orderItemMapper;
     private final ProductMapper productMapper;
     private final PaymentMapper paymentMapper;
+    private final EventMapper eventMapper;
 
 
     /**
@@ -79,6 +80,10 @@ public class BloomFilterService {
             List<Payment> paymentList = paymentMapper.selectList(null);
             paymentList.forEach(payment -> cacheClient.addToBloomFilter(payment.getId()));
             log.info("已添加 {} 个支付ID到布隆过滤器",paymentList.size());
+
+            List<Event> eventList = eventMapper.selectList(null);
+            eventList.forEach(event -> cacheClient.addToBloomFilter(event.getId()));
+            log.info("已添加 {} 个活动ID到布隆过滤器",paymentList.size());
 
             log.info("布隆过滤器初始化完成");
         } catch (Exception e) {

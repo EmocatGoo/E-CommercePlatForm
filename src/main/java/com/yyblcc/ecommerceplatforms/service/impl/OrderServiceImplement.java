@@ -1,15 +1,13 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderItemDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderStatsuDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.UserSignUpRefundDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.Enum.OrderStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.Enum.RefundEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.*;
@@ -51,6 +49,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     private final RocketMQTemplate rocketMQTemplate;
     private final PaymentMapper paymentMapper;
     private static final String DELETE_CART_TOPIC = "cart-delete-topic";
+    private static final String ORDER_REFUND_TOPIC = "order-refund-topic";
     private final OrderItemMapper orderItemMapper;
     private final UserMapper userMapper;
     private final RefundMapper refundMapper;
@@ -369,7 +368,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         if (CollUtil.isEmpty(orders)) {
             throw new BusinessException("订单查询发生异常，退款失败");
         }
-        //退款情况，1、未发货 2、未收货（运输中）3、待评价（已收货）4、已评价 ，也就是均可发起退款申请，但是具体需要匠人通过
+        //退款情况，1、未发货 2、未收货（运输中）3、待评价（已收货）4、已评价 ，也就是均可发起退款申请，但是具体需要匠人审核
         List<String> orderSnList = orders.stream().map(Order::getOrderSn).toList();
 
         if (CollUtil.isEmpty(orderSnList)) {
@@ -402,6 +401,71 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .refundStatus(RefundEnum.APPLY.getCode())
                 .build());
         return Result.success("已申请退款，请等待商家审核");
+    }
+
+    @Override
+    public Result reviewOrder(OrderReviewDTO orderReviewDTO) {
+        Long craftsmanId = AuthContext.getUserId();
+
+        if (craftsmanId == null) {
+            throw new BusinessException("请先登录");
+        }
+
+        //查询退款申请是否存在
+        Refund refund = refundMapper.selectOne(new LambdaQueryWrapper<Refund>()
+                .eq(Refund::getOrderSn, orderReviewDTO.getOrderSn())
+                .eq(Refund::getCraftsmanId, craftsmanId)
+                .eq(Refund::getRefundStatus, RefundEnum.APPLY.getCode())
+                .last("FOR UPDATE"));
+        if (refund == null) {
+            throw new BusinessException("退款申请不存在");
+        }
+
+        Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>()
+                .eq(Order::getOrderSn, orderReviewDTO.getOrderSn())
+                .last("FOR UPDATE"));
+
+        Integer status = orderReviewDTO.getStatus();
+
+        if (status.equals(RefundEnum.AGREE.getCode())){
+            if (order.getOrderStatus().equals(OrderStatusEnum.RECEIPT.getCode()) ||
+                    order.getOrderStatus().equals(OrderStatusEnum.BEEVALUATED.getCode())) {
+                refund.setRefundStatus(RefundEnum.AGREE.getCode());
+                refund.setRefundType(RefundEnum.BACKGOODS.getCode());
+                refund.setAgreeTime(LocalDateTime.now());
+                refundMapper.updateById(refund);
+
+                orderItemMapper.update(new LambdaUpdateWrapper<OrderItem>()
+                        .eq(OrderItem::getOrderSn, orderReviewDTO.getOrderSn())
+                        .eq(OrderItem::getCraftsmanId, craftsmanId)
+                        .set(OrderItem::getRefundStatus, OrderStatusEnum.APPROVE.getCode())
+                        .set(OrderItem::getRefundAmount,order.getTotalAmount())
+                        .last("FOR UPDATE"));
+
+                return Result.success("同意退款，请等待用户退货");
+            }else{
+                refund.setRefundStatus(RefundEnum.SUCCESS.getCode());
+                refund.setRefundType(RefundEnum.RETURN.getCode());
+                refund.setAgreeTime(LocalDateTime.now());
+                refundMapper.updateById(refund);
+                rocketMQTemplate.syncSend(ORDER_REFUND_TOPIC, refund);
+                return Result.success("退款处理中，预计1-7个工作日到账");
+            }
+        }else if (status.equals(RefundEnum.REFUSE.getCode())){
+            refund.setRefundStatus(RefundEnum.REFUSE.getCode());
+            refund.setRefuseReason(orderReviewDTO.getRejectReason());
+            refundMapper.updateById(refund);
+
+            orderItemMapper.update(new LambdaUpdateWrapper<OrderItem>()
+                    .eq(OrderItem::getOrderSn, orderReviewDTO.getOrderSn())
+                    .eq(OrderItem::getCraftsmanId, craftsmanId)
+                    .set(OrderItem::getRefundStatus, OrderStatusEnum.REFUSE.getCode())
+                    .last("FOR UPDATE"));
+
+            return Result.success("已拒绝退款");
+        }
+
+        return Result.error("操作失败");
     }
 
     private OrderUserVO convertToOrderUserVO(Order order) {

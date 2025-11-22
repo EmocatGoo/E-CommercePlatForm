@@ -1,6 +1,7 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.OrderDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.OrderReviewDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.OrderStatsuDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.UserSignUpRefundDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
@@ -89,4 +90,9 @@ public class OrderController {
         return orderService.signUpRefund(userSignUpRefundDTO);
     }
 
+    @PostMapping("/reviewOrder")
+    public Result reviewOrder(@RequestBody @Validated OrderReviewDTO orderReviewDTO){
+        log.info("匠人审核用户退款:{}",orderReviewDTO);
+        return orderService.reviewOrder(orderReviewDTO);
+    }
 }

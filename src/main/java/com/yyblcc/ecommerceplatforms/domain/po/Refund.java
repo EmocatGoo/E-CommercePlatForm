@@ -54,5 +54,4 @@ public class Refund {
     @TableLogic
     private Integer isDeleted;
 
-
 }

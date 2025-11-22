@@ -12,7 +12,14 @@ public enum OrderStatusEnum {
     BEEVALUATED(3,"待评价"),
     REFUND(4,"退款/售后"),
     CANCEL(5,"取消"),
-    EVALUATED(6,"已评价");
+    EVALUATED(6,"已评价"),
+
+    //orderItem相关Refund Status
+    NOTHING(0,"无"),
+    APPROVE(2,"通过"),
+    REFUSE(3,"拒绝"),
+    SUCCESS(4,"已退款");
+
 
     @EnumValue
     private final int code;

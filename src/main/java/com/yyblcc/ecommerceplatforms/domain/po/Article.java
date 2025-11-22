@@ -9,33 +9,29 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@TableName("tb_payment")
-public class Payment {
+@TableName("tb_article")
+public class Article {
     @TableId(type = IdType.AUTO)
     private Long id;
-    //支付单号
-    private String mergePaySn;
-    //支付用户id
-    private Long userId;
-    //合计支付金额
-    private BigDecimal totalAmount;
-    //子订单数量
-    private Integer orderCount;
-    //支付状态
-    private Integer payStatus;
-    //支付创建时间
+    private String articleTitle;
+    private String articleContent;
+    //1管理员发布 2匠人发布
+    private Integer authorType;
+    private Long authorId;
+    private String authorName;
+    //1非遗新闻 2知识文章
+    private Integer articleType;
+    //0审核中 1已发布 2已下架
+    private Integer status;
+    private String coverImage;
     private LocalDateTime createTime;
-    //支付完成时间
-    private LocalDateTime payTime;
-    //支付过期时间
-    private LocalDateTime expireTime;
+    private LocalDateTime updateTime;
 
     @TableLogic
     private Integer isDeleted;

@@ -29,7 +29,7 @@ public class BloomFilterAspect {
     private static final Set<Class<?>> BLOOM_FILTER_ENTITIES = Set.of(
             User.class, Admin.class, Craftsman.class, WorkShop.class,
             UserCollect.class,Product.class,Order.class,OrderItem.class,
-            UserAddress.class
+            UserAddress.class, Event.class
     );
 
     /**

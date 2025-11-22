@@ -9,34 +9,24 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Builder
-@TableName("tb_payment")
-public class Payment {
+@TableName("tb_event_apply")
+public class EventApply {
     @TableId(type = IdType.AUTO)
     private Long id;
-    //支付单号
-    private String mergePaySn;
-    //支付用户id
+    private Long eventId;
     private Long userId;
-    //合计支付金额
-    private BigDecimal totalAmount;
-    //子订单数量
-    private Integer orderCount;
-    //支付状态
-    private Integer payStatus;
-    //支付创建时间
+    private String realName;
+    private String phone;
+    private String idCard;
+    private Integer status;
+    private LocalDateTime signTime;
     private LocalDateTime createTime;
-    //支付完成时间
-    private LocalDateTime payTime;
-    //支付过期时间
-    private LocalDateTime expireTime;
-
     @TableLogic
     private Integer isDeleted;
 }
