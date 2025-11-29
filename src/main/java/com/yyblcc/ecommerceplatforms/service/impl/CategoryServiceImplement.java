@@ -1,12 +1,14 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CategoryDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Category;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.CategoryQuery;
 import com.yyblcc.ecommerceplatforms.mapper.CategoryMapper;
 import com.yyblcc.ecommerceplatforms.service.CategoryService;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +30,10 @@ public class CategoryServiceImplement extends ServiceImpl<CategoryMapper, Catego
     private static final String CATEGORY_PAGE_KEY = "category:page:";
 
     @Override
-    public Result<PageBean> pageCategory(Integer page, Integer pageSize) {
+    public Result<PageBean> pageCategory(CategoryQuery query) {
+        String key = CATEGORY_PAGE_KEY + query.getPage() + ":" + query.getPageSize();
         try{
-            String categoryCache = stringRedisTemplate.opsForValue().get(CATEGORY_PAGE_KEY + page + ":" + pageSize);
+            String categoryCache = stringRedisTemplate.opsForValue().get(key);
             if(categoryCache != null){
                 if (categoryCache.isEmpty()){
                     return Result.success();
@@ -40,9 +43,13 @@ public class CategoryServiceImplement extends ServiceImpl<CategoryMapper, Catego
         }catch (Exception e){
             return Result.error(e.getMessage());
         }
-        Page<Category> categoryPage = categoryMapper.selectPage(new Page<>(page,pageSize),null);
+        Page<Category> categoryPage = categoryMapper.selectPage(new Page<>(query.getPage(),query.getPageSize()),
+                new LambdaQueryWrapper<Category>()
+                        .eq(query.getTag()!=null, Category::getTag,query.getTag())
+                        .like(query.getCategoryName()!=null, Category::getCategoryName, query.getCategoryName())
+                        .orderByDesc(Category::getCreateTime));
         PageBean<Category> pageBean = new PageBean<>(categoryPage.getTotal(), categoryPage.getRecords());
-        stringRedisTemplate.opsForValue().set(CATEGORY_PAGE_KEY+page+":"+pageSize,JSON.toJSONString(pageBean), Duration.ofMinutes(10));
+        stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean), Duration.ofMinutes(10));
         return Result.success(pageBean);
     }
 
@@ -94,6 +101,7 @@ public class CategoryServiceImplement extends ServiceImpl<CategoryMapper, Catego
         if (updateById(category)) {
             return Result.success("修改成功!");
         }
+        stringRedisTemplate.keys("category:page:*").forEach(stringRedisTemplate::delete);
         return Result.error("修改失败!");
     }
 }

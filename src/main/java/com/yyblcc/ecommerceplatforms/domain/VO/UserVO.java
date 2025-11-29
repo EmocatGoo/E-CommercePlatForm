@@ -17,6 +17,7 @@ public class UserVO {
     private String nickname;
     private String phone;
     private String email;
+    private String idNumber;
     private Long defaultAddressId;
     private Integer sex;
     private String avatar;

@@ -4,11 +4,12 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CategoryDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Category;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.CategoryQuery;
 
 import java.util.List;
 
 public interface CategoryService extends IService<Category> {
-    Result pageCategory(Integer page, Integer pageSize);
+    Result pageCategory(CategoryQuery query);
 
     Result insertCategory(Category category);
 

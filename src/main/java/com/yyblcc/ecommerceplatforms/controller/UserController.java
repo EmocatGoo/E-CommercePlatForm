@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.controller;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.service.UserService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Max;
@@ -55,6 +56,16 @@ public class UserController {
     public Result<?> login(@RequestBody LoginDTO loginDTO, HttpServletRequest request) {
         log.info("loginDTO={}", loginDTO);
         return userService.login(loginDTO, request);
+    }
+
+    @PostMapping("/logout")
+    public Result<?> logout() {
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        if (!userId.equals(StpKit.USER.getLoginIdAsLong())){
+            return Result.error("用户信息不一致!");
+        }
+        StpKit.USER.logout(userId);
+        return Result.success("已退出登录");
     }
 
     /**

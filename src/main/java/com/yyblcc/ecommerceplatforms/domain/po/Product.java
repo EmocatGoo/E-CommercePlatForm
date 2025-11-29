@@ -1,9 +1,6 @@
 package com.yyblcc.ecommerceplatforms.domain.po;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -46,6 +43,12 @@ public class Product {
     private String imageUrl;
     //商品文化背景
     private String culturalBackground;
+    //点赞数
+    private Integer likeCount;
+    //收藏数
+    private Integer favoriteCount;
+    //售卖数量
+    private Integer saleCount;
     //创建时间
     private LocalDateTime createTime;
     //更新时间

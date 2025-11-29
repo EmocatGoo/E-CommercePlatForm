@@ -12,7 +12,7 @@ import com.yyblcc.ecommerceplatforms.domain.query.ProductQuery;
 import java.util.List;
 
 public interface ProductService extends IService<Product> {
-    PageBean adminPage(Integer page, Integer pageSize);
+    PageBean adminPage(ProductQuery query);
     void review(ProductDTO reviewDTO);
     void changeStatus(Long productId, Integer status);
     boolean removeByIds(List<Long> ids);
@@ -24,4 +24,14 @@ public interface ProductService extends IService<Product> {
     PageBean<ProductListVO> frontPage(ProductQuery search);
     List<ProductListVO> recommend(Integer size);
     List<ProductListVO> listByCraftsman(Long craftsmanId);
+
+    Result favorite(Long productId);
+
+    Result<List<ProductListVO>> getMyFavorite(Long productId);
+
+    Result like(Long productId);
+
+    Result<List<ProductListVO>> getMyLike(Long productId);
+
+
 }

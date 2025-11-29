@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.service;
 import cn.hutool.db.PageResult;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.EventApplyDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.EventCommentAddDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.EventDTO;
 import com.yyblcc.ecommerceplatforms.domain.VO.EventVO;
 import com.yyblcc.ecommerceplatforms.domain.po.Event;
@@ -25,4 +26,6 @@ public interface EventService extends IService<Event> {
     Result signIn(Long eventId);
 
     Result getApplyList(Long eventId);
+
+    Result createComment(EventCommentAddDTO dto);
 }

@@ -102,8 +102,7 @@ public class ArticleServiceImplement extends ServiceImpl<ArticleMapper, Article>
         Page<Article> articlePage = articleMapper.selectPage(new Page<>(articleQuery.getPage(),articleQuery.getPageSize()),
                 new LambdaQueryWrapper<Article>()
                         .like(articleQuery.getArticleTitle()!=null,Article::getArticleTitle,articleQuery.getArticleTitle())
-                        .orderByDesc(Article::getCreateTime)
-                        .last("FOR UPDATE"));
+                        .orderByDesc(Article::getCreateTime));
         List<ArticleVO> voList = articlePage.getRecords().stream().map(this::convertArticleVO).toList();
         PageBean<ArticleVO> pageBean = new PageBean<>(articlePage.getTotal(),voList);
         stringRedisTemplate.opsForValue().set(key, JSON.toJSONString(pageBean), Duration.ofMinutes(15));

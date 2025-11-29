@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -19,6 +20,7 @@ import com.yyblcc.ecommerceplatforms.mapper.UserAddressMapper;
 import com.yyblcc.ecommerceplatforms.mapper.UserMapper;
 import com.yyblcc.ecommerceplatforms.service.UserAddressService;
 import com.yyblcc.ecommerceplatforms.service.UserService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.redis.AccountLockCheck;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
@@ -42,8 +44,6 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class UserServiceImplement extends ServiceImpl<UserMapper, User> implements UserService {
 
-    @Autowired
-    private FinalCheck finalCheck;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
@@ -133,7 +133,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
 
     @Override
     public Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request) {
-        Long userId = Long.valueOf(request.getHeader("USER_ID"));
+        Long userId = AuthContext.getUserId();
         if (userId == null) {
             return Result.error("发生异常!");
         }
@@ -147,6 +147,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
             userMapper.update(user);
         }
         stringRedisTemplate.delete(USER_SEARCH_KEYPRIFIX + userId);
+        StpUtil.logout(userId);
         return Result.success("密码更新成功!");
     }
 
@@ -224,7 +225,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
         }
 
         if (loginDTO.getLoginType() == 1){
-            return UsernameLogin(request, username, password, identifier);
+            return UsernameLogin(username, password, identifier);
         } else if (loginDTO.getLoginType() == 2) {
             return PhoneLogin(phone, password, identifier,request);
         }
@@ -356,6 +357,8 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
         return Result.error("设置失败!");
     }
 
+
+
     private Result PhoneLogin(String phone, String password,String identifier, HttpServletRequest request) {
         if (StringUtils.isBlank(phone)) {
             return Result.error("手机号码不能为空!");
@@ -374,11 +377,11 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,user);
-        return Result.success("登陆成功!");
+        UserVO userVO = setSession(user);
+        return Result.success(userVO);
     }
 
-    private Result UsernameLogin(HttpServletRequest request, String username, String password,String identifier) {
+    private Result UsernameLogin(String username, String password,String identifier) {
         if (StringUtils.isBlank(username)) {
             return Result.error("用户名不能为空!");
         }
@@ -398,20 +401,22 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,user);
-        return Result.success("登陆成功!");
+        UserVO userVO = setSession(user);
+        return Result.success(userVO);
     }
 
     /**
-     * 设置 Session
+     * 设置 Sa-Token 登录信息
      */
-    private void setSession(HttpServletRequest request, User user) {
-        HttpSession session = request.getSession(true);
+    private UserVO setSession(User user) {
         UserVO userVO = convertToVO(user);
-        session.setAttribute("USER", userVO);
-        session.setAttribute("ROLE", RoleEnum.USER);
-        session.setAttribute("USER_ID", user.getId());
-        session.setMaxInactiveInterval(30 * 60);
+        // 使用StpKit.USER进行登录，实现用户会话隔离
+        com.yyblcc.ecommerceplatforms.util.StpKit.USER.login(user.getId());
+        // 将用户信息和角色存储到对应的Session中
+        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("USER", userVO);
+        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("ROLE", RoleEnum.USER);
+        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("USER_ID", user.getId());
+        return userVO;
     }
 
     private UserVO convertToVO(User user) {
@@ -421,6 +426,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
                 .nickname(user.getNickname())
                 .phone(user.getPhone())
                 .email(user.getEmail())
+                .idNumber(user.getIdNumber())
                 .sex(user.getSex())
                 .defaultAddressId(user.getDefaultAddressId())
                 .status(user.getStatus())

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.yyblcc.ecommerceplatforms.mapper.ProductCommentMapper">
+    <select id="listByProductId" resultType="com.yyblcc.ecommerceplatforms.domain.po.ProductComment">
+        SELECT * FROM tb_product_comment
+        WHERE product_id = #{productId} AND is_deleted = 0
+        ORDER BY path DESC , created_time DESC
+        limit #{offset}, #{size}
+    </select>
+    
+    <select id="listChildren" resultType="com.yyblcc.ecommerceplatforms.domain.po.ProductComment">
+        SELECT * FROM tb_product_comment
+        WHERE path LIKE CONCAT(#{path}, '/%')
+            AND id != #{currentId}
+            AND is_deleted = 0
+        ORDER BY path
+    </select>
+
+    <select id="listByRootId" resultType="com.yyblcc.ecommerceplatforms.domain.po.ProductComment">
+        SELECT * FROM tb_product_comment
+        WHERE root_id = #{rootId} AND is_deleted = 0
+        ORDER BY path
+    </select>
+</mapper>

@@ -1,11 +1,13 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.AdminDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.LoginDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.service.AdminService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -109,6 +111,14 @@ public class AdminController {
     public Result login(@RequestBody LoginDTO loginDTO, HttpServletRequest request){
         log.info("login={}", loginDTO);
         return adminService.login(loginDTO,request);
+    }
+
+    @PostMapping("/logout")
+    public Result logout(){
+        Long adminId = StpKit.ADMIN.getLoginIdAsLong();
+        log.info("管理员 {} 登出", adminId);
+        StpKit.ADMIN.logout(adminId);
+        return Result.success("已退出登录");
     }
 
     @PutMapping("/resetPassword")

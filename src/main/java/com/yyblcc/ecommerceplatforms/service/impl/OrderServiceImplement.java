@@ -59,6 +59,8 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     public Result<PageBean> pageList(OrderQuery orderQuery) {
         Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()), new LambdaQueryWrapper<Order>()
                 .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
+                .like(orderQuery.getConsignee() != null, Order::getConsignee, orderQuery.getConsignee())
+                .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
                 .orderByAsc(Order::getCreateTime));
         
         List<OrderAdminVO> orderAdminVOList = orderPage.getRecords().stream()
@@ -510,6 +512,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .totalAmount(order.getTotalAmount())
                 .craftsmanAmount(order.getCraftsmanAmount())
                 .orderStatus(order.getOrderStatus())
+                .paymentSn(order.getPaySn())
                 .payStatus(order.getPayStatus())
                 .paymentMethod(order.getPaymentMethod())
                 .payTime(order.getPayTime())

@@ -42,4 +42,5 @@ public interface UserService extends IService<User> {
     Result<?> getUserAddressList(Long userId);
 
     Result<?> setDefaultAddress(Long addressId);
+
 }

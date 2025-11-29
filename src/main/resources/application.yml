@@ -1,6 +1,7 @@
 spring:
   application:
     name: e-commerceplatforms
+
 #MySQL配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -58,11 +59,16 @@ mybatis-plus:
       type-enums-package: com.yyblcc.ecommerceplatforms.entity.Enum
   configuration:
     map-underscore-to-camel-case: true
-#设置session有效期为30min
-server:
-  servlet:
-    session:
-      timeout: 30m
+#Sa-Token配置
+sa-token:
+  token-name: Authorization
+  timeout: 1800  # 30分钟，单位秒
+  activit-timeout: -1  # -1表示永不过期
+  is-concurrent: false  # 同一账号是否允许多处登录
+  is-share: true  # 同一token是否在多人登录时共享
+  token-style: uuid  # token风格
+  is-log: true  # 是否打印操作日志
+#  port: 2112
 #SpringMail附属配置
 app:
   verify-code:

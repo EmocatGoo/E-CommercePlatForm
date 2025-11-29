@@ -26,8 +26,8 @@ public class ProductController {
      * 分页查询商品列表（管理员后台用）
      */
     @GetMapping("/page")
-    public Result<PageBean> adminPage(@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "10") Integer pageSize) {
-        return Result.success(productService.adminPage(page,pageSize));
+    public Result<PageBean> adminPage(ProductQuery query) {
+        return Result.success(productService.adminPage(query));
     }
 
     /**
@@ -137,4 +137,45 @@ public class ProductController {
     public Result<List<ProductListVO>> byCraftsman(@PathVariable Long craftsmanId) {
         return Result.success(productService.listByCraftsman(craftsmanId));
     }
+
+    /**
+     * 用户点赞商品
+     * @param productId
+     * @return
+     */
+    @PostMapping("/like/{productId}")
+    public Result like(@PathVariable Long productId) {
+        return productService.like(productId);
+    }
+
+    /**
+     * 用户收藏商品
+     * @param productId
+     * @return
+     */
+    @PostMapping("/favorite/{productId}")
+    public Result collect(@PathVariable Long productId) {
+        return productService.favorite(productId);
+    }
+
+    /**
+     * 用户获取我收藏的商品
+     * @param productId
+     * @return
+     */
+    @GetMapping("/myFavorite")
+    public Result<List<ProductListVO>> myFavorite(@RequestParam Long productId) {
+        return productService.getMyFavorite(productId);
+    }
+
+    /**
+     * 用户获取我点赞的商品
+     * @param productId
+     * @return
+     */
+    @GetMapping("/myLike")
+    public Result<List<ProductListVO>> myLike(@RequestParam Long productId) {
+        return productService.getMyLike(productId);
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -381,11 +382,12 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
      * 设置 Session
      */
     private void setSession(HttpServletRequest request, Admin admin) {
-        HttpSession session = request.getSession(true);
-        session.setAttribute("USER", admin);
-        session.setAttribute("ROLE", admin.getRole());
-        session.setAttribute("USER_ID", admin.getId());
-        session.setMaxInactiveInterval(30 * 60);
+        // 使用StpKit.ADMIN进行登录，实现管理员会话隔离
+        com.yyblcc.ecommerceplatforms.util.StpKit.ADMIN.login(admin.getId());
+        // 将用户信息和角色存储到对应的Session中
+        com.yyblcc.ecommerceplatforms.util.StpKit.ADMIN.getSession().set("USER", admin);
+        com.yyblcc.ecommerceplatforms.util.StpKit.ADMIN.getSession().set("ROLE", admin.getRole());
+        com.yyblcc.ecommerceplatforms.util.StpKit.ADMIN.getSession().set("USER_ID", admin.getId());
     }
 
 

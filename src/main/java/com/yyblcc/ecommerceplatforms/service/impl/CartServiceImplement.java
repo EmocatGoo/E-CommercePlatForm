@@ -76,7 +76,9 @@ public class CartServiceImplement extends ServiceImpl<CartMapper, Cart> implemen
                 .checked(Boolean.TRUE.equals(dto.getIsChecked()))
                 .build();
         rocketMQTemplate.asyncSend("cart-add-topic", message, new SendCallback() {
-            @Override public void onSuccess(SendResult result) { }
+            @Override public void onSuccess(SendResult result) {
+
+            }
             @Override public void onException(Throwable e) {
                 log.error("MQ发送失败", e);
             }
@@ -106,7 +108,9 @@ public class CartServiceImplement extends ServiceImpl<CartMapper, Cart> implemen
                                         .quantity(item.getQuantity())
                                         .build();
         rocketMQTemplate.asyncSend("cart-check-topic", checkMessageMessage, new SendCallback() {
-            @Override public void onSuccess(SendResult result) { }
+            @Override public void onSuccess(SendResult result) {
+
+            }
             @Override public void onException(Throwable e) {
                 log.error("MQ发送失败",e);
             }

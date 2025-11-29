@@ -2,6 +2,7 @@ package com.yyblcc.ecommerceplatforms.controller;
 
 import cn.hutool.db.PageResult;
 import com.yyblcc.ecommerceplatforms.domain.DTO.EventApplyDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.EventCommentAddDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.EventDTO;
 import com.yyblcc.ecommerceplatforms.domain.VO.EventVO;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
@@ -76,6 +77,12 @@ public class EventController {
 //    @PreAuthorize("hasAnyRole('ADMIN','CRAFTSMAN')")
     public Result applies(@PathVariable Long eventId) {
         return eventService.getApplyList(eventId);
+    }
+
+    @PostMapping("/comment")
+    public Result comment(@RequestBody EventCommentAddDTO dto) {
+        log.info("用户评论：{}",dto);
+        return eventService.createComment(dto);
     }
 
 }

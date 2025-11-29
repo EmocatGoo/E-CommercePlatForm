@@ -60,6 +60,7 @@ public class WorkShopController {
     public Result getWorkShopByCraftsmanId(){
 //        log.info("id={}", craftsmanId);
 //        Long craftsmanId = AuthContext.getUserId();
+        //TODO 修改
         Long craftsmanId = 2L;
         return workShopService.getWorkShopByCraftsmanId(craftsmanId);
     }

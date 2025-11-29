@@ -5,7 +5,6 @@ import lombok.Data;
 
 @Data
 public class ArticleQuery {
-
     private String articleTitle;
     @Min(1)
     private Integer page;

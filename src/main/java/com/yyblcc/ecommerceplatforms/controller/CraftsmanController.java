@@ -8,6 +8,7 @@ import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -130,6 +131,14 @@ public class CraftsmanController {
     public Result login(@RequestBody LoginDTO loginDTO, HttpServletRequest request){
         log.info("login={}", loginDTO);
         return craftsmanService.login(loginDTO,request);
+    }
+
+    @PostMapping("/logout")
+    public Result logout(){
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        log.info("craftsman {} 登出", craftsmanId);
+        StpKit.CRAFTSMAN.logout(craftsmanId);
+        return Result.success("已退出登录");
     }
 
     @PutMapping("/resetPassword")

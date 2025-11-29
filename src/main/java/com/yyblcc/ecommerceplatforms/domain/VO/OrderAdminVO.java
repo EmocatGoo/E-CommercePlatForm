@@ -29,6 +29,8 @@ public class OrderAdminVO {
     private BigDecimal craftsmanAmount;
     // 订单状态（中文：待付款/已完成）
     private Integer orderStatus;
+    // 支付单号
+    private String paymentSn;
     // 支付状态
     private Integer payStatus;
     // 支付方式

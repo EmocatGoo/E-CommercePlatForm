@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -255,8 +256,9 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
 
     @Override
     public Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request) {
-        Long craftsmanId = Long.valueOf(request.getHeader("USER_ID"));
-        if (!Objects.equals(RoleEnum.CRAFTSMAN.toString(), request.getHeader("ROLE"))){
+        Long craftsmanId = StpUtil.getLoginIdAsLong();
+        RoleEnum role = (RoleEnum) StpUtil.getSession().get("ROLE");
+        if (!Objects.equals(RoleEnum.CRAFTSMAN, role)){
             return Result.error("未找到匠人信息!");
         }
         try{
@@ -396,8 +398,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,craftsman);
-        return Result.success("登陆成功!");
+        CraftsmanVO craftsmanVO = setSession(craftsman);
+        return Result.success(craftsmanVO);
     }
 
     private Result UsernameLogin(String username, String password,String identifier,HttpServletRequest request) {
@@ -420,8 +422,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,craftsman);
-        return Result.success("登陆成功!");
+        CraftsmanVO craftsmanVO = setSession(craftsman);
+        return Result.success(craftsmanVO);
     }
 
     private CraftsmanVO convertToVO(Craftsman craftsman) {
@@ -442,13 +444,15 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     /**
      * 设置 Session
      */
-    private void setSession(HttpServletRequest request, Craftsman craftsman) {
-        HttpSession session = request.getSession(true);
+    private CraftsmanVO setSession(Craftsman craftsman) {
         CraftsmanVO craftsmanVO = convertToVO(craftsman);
-        session.setAttribute("USER", craftsmanVO);
-        session.setAttribute("ROLE", RoleEnum.CRAFTSMAN);
-        session.setAttribute("USER_ID", craftsman.getId());
-        session.setMaxInactiveInterval(30 * 60);
+        // 使用StpKit.CRAFTSMAN进行登录，实现工匠会话隔离
+        com.yyblcc.ecommerceplatforms.util.StpKit.CRAFTSMAN.login(craftsman.getId());
+        // 将用户信息和角色存储到对应的Session中
+        com.yyblcc.ecommerceplatforms.util.StpKit.CRAFTSMAN.getSession().set("USER", craftsmanVO);
+        com.yyblcc.ecommerceplatforms.util.StpKit.CRAFTSMAN.getSession().set("ROLE", RoleEnum.CRAFTSMAN);
+        com.yyblcc.ecommerceplatforms.util.StpKit.CRAFTSMAN.getSession().set("USER_ID", craftsman.getId());
+        return craftsmanVO;
     }
 
 }
