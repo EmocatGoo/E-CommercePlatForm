@@ -2,6 +2,7 @@ package com.yyblcc.ecommerceplatforms.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.AddCartDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.CartItemToggle;
 import com.yyblcc.ecommerceplatforms.domain.VO.CartVO;
 import com.yyblcc.ecommerceplatforms.domain.po.Cart;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
@@ -18,4 +19,6 @@ public interface CartService extends IService<Cart> {
     Result<?> batchdelete(List<Long> productIds);
 
     Result<?> delete(Long productId);
+
+    void toggleQuantity(CartItemToggle dto);
 }

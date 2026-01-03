@@ -14,4 +14,5 @@ public class QuestionVO {
     private Long id;
     private String title;
     private String options;
+    private Integer questionType;
 }

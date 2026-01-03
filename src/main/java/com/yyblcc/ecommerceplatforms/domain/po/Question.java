@@ -27,6 +27,8 @@ public class Question {
     private String options;
     private String answer;
 
+    private Integer questionType;
+
     private Long categoryId;
     private LocalDateTime createTime;
 

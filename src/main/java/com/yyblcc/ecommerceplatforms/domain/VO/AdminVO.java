@@ -16,4 +16,5 @@ public class AdminVO {
     private String name;
     private String avatar;
     private RoleEnum role;
+    private String token;  // SaToken 令牌，用于前端认证
 }

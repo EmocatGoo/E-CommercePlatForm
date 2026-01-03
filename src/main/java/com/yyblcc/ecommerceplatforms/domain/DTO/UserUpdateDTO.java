@@ -14,5 +14,4 @@ public class UserUpdateDTO {
     private String email;
     private String phone;
     private String idNumber;
-    private String avatar;
 }

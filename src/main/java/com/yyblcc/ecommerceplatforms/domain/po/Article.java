@@ -27,8 +27,17 @@ public class Article {
     private String authorName;
     //1非遗新闻 2知识文章
     private Integer articleType;
-    //0审核中 1已发布 2已下架
+    //分类id
+    private Long categoryId;
+    //1已发布 2下架
     private Integer status;
+    //审核状态 0-审核中 1-审核通过 2-审核拒绝
+    private Integer reviewStatus;
+    //审核拒绝原因
+    private String refuseReason;
+    private Integer viewCount;
+    private Integer likeCount;
+    private Integer favoriteCount;
     private String coverImage;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

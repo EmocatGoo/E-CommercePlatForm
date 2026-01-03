@@ -12,6 +12,7 @@ import com.yyblcc.ecommerceplatforms.domain.query.CategoryQuery;
 import com.yyblcc.ecommerceplatforms.mapper.CategoryMapper;
 import com.yyblcc.ecommerceplatforms.service.CategoryService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -21,35 +22,21 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CategoryServiceImplement extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
-
     private final CategoryMapper categoryMapper;
-    private final StringRedisTemplate stringRedisTemplate;
-    private static final String CATEGORY_PAGE_KEY = "category:page:";
-
     @Override
     public Result<PageBean> pageCategory(CategoryQuery query) {
-        String key = CATEGORY_PAGE_KEY + query.getPage() + ":" + query.getPageSize();
-        try{
-            String categoryCache = stringRedisTemplate.opsForValue().get(key);
-            if(categoryCache != null){
-                if (categoryCache.isEmpty()){
-                    return Result.success();
-                }
-                return Result.success(JSON.parseObject(categoryCache,PageBean.class));
-            }
-        }catch (Exception e){
-            return Result.error(e.getMessage());
-        }
-        Page<Category> categoryPage = categoryMapper.selectPage(new Page<>(query.getPage(),query.getPageSize()),
+        Page<Category> categoryPage = categoryMapper.selectPage(
+                new Page<>(query.getPage(), query.getPageSize()),
                 new LambdaQueryWrapper<Category>()
-                        .eq(query.getTag()!=null, Category::getTag,query.getTag())
-                        .like(query.getCategoryName()!=null, Category::getCategoryName, query.getCategoryName())
-                        .orderByDesc(Category::getCreateTime));
+                        .eq(query.getTag() != null, Category::getTag, query.getTag())
+                        .like(query.getCategoryName() != null, Category::getCategoryName, query.getCategoryName())
+                        .orderByAsc(Category::getCreateTime)
+        );
         PageBean<Category> pageBean = new PageBean<>(categoryPage.getTotal(), categoryPage.getRecords());
-        stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean), Duration.ofMinutes(10));
         return Result.success(pageBean);
     }
 
@@ -101,7 +88,23 @@ public class CategoryServiceImplement extends ServiceImpl<CategoryMapper, Catego
         if (updateById(category)) {
             return Result.success("修改成功!");
         }
-        stringRedisTemplate.keys("category:page:*").forEach(stringRedisTemplate::delete);
         return Result.error("修改失败!");
     }
+
+    @Override
+    public Result<?> selectHeritageArticleCategory() {
+        List<Category> articleCategoryList = categoryMapper.selectList(new LambdaQueryWrapper<Category>()
+                .eq(Category::getTag, 4)
+                .orderByDesc(Category::getCreateTime));
+        return Result.success(articleCategoryList);
+    }
+
+    @Override
+    public Result<?> selectCultureGameCategory() {
+        List<Category>  cultureGameCategoryList = categoryMapper.selectList(new LambdaQueryWrapper<Category>()
+                .eq(Category::getTag, 2)
+                .orderByDesc(Category::getCreateTime));
+        return Result.success(cultureGameCategoryList);
+    }
+
 }

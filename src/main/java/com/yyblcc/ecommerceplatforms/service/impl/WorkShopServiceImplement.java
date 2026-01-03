@@ -10,14 +10,22 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductVO;
 import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import com.yyblcc.ecommerceplatforms.exception.BusinessException;
+import com.yyblcc.ecommerceplatforms.mapper.CraftsmanMapper;
 import com.yyblcc.ecommerceplatforms.mapper.UserCollectMapper;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
+import com.yyblcc.ecommerceplatforms.service.ProductService;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -25,22 +33,22 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkShop> implements WorkShopService {
-
-    @Autowired
-    private WorkShopMapper workShopMapper;
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
-    @Autowired
-    private CraftsmanService craftsmanService;
-    @Autowired
-    private UserCollectMapper userCollectMapper;
+    private final WorkShopMapper workShopMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final CraftsmanService craftsmanService;
+    private final UserCollectMapper userCollectMapper;
+    private final ProductService productService;
+    private final CraftsmanMapper craftsmanMapper;
 
     @Override
     public Result reviewWorkshop(Long workshopId, Integer status) {
@@ -48,9 +56,8 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
 
         if (success){
             try{
-                Set<String> keys = stringRedisTemplate.keys("workshop:*");
-                keys.forEach(key -> stringRedisTemplate.delete(key));
-                return Result.success("更新成功!");
+                stringRedisTemplate.keys("workshop:*").forEach(stringRedisTemplate::delete);
+                return Result.success("更新成功");
             }catch (Exception e){
                 throw new RuntimeException(e.getMessage());
             }
@@ -62,38 +69,43 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     public Result banWorkshop(Long workshopId) {
         boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getId, workshopId).set(WorkShop::getStatus, 0).update();
         if (success){
-            Set<String> keys = stringRedisTemplate.keys("workshop:*");
-            keys.forEach(key ->{
-                stringRedisTemplate.delete(key);
-            });
+            stringRedisTemplate.keys("workshop:*").forEach(stringRedisTemplate::delete);
             return Result.success("工作室已被关闭");
         }
         return Result.error("发生错误!");
     }
 
     @Override
-    public Result pageWorkShop(Integer page, Integer pageSize) {
-        String key = "workshop:page:" + page + ":" +pageSize;
-        String workshopStr = stringRedisTemplate.opsForValue().get(key);
-        if (workshopStr != null){
-            return Result.success(JSON.parseObject(workshopStr, PageBean.class));
+    public Result pageWorkShop(PageQuery query) {
+        boolean isCondition = query.getKeyword() != null;
+        String key = "workshop:page:" + query.getPage() + ":" +query.getPageSize();
+        if (!isCondition){
+            try{
+                String workshopStr = stringRedisTemplate.opsForValue().get(key);
+                if (workshopStr != null){
+                    if (workshopStr.isEmpty()){
+                        return Result.success();
+                    }
+                    return Result.success(JSON.parseObject(workshopStr, PageBean.class));
+                }
+            } catch (RuntimeException e) {
+                throw new RuntimeException(e);
+            }
         }
-        Page<WorkShop> workShopPage = new Page<>(page,pageSize);
-        Page<WorkShop> workShopList = workShopMapper.selectPage(workShopPage,null);
+        Page<WorkShop> workShopList = workShopMapper.selectPage(new Page<>(query.getPage(),query.getPageSize()),
+                new LambdaQueryWrapper<WorkShop>()
+                        .like(query.getKeyword() != null , WorkShop::getWorkshopName, query.getKeyword())
+                        .orderByAsc(WorkShop::getId));
         List<WorkShopVO> workShopVOList = new ArrayList<>();
 
         workShopList.getRecords().forEach(workShop -> {
-            Long craftsmanId = workShop.getCraftsmanId();
-            Craftsman craftsman = craftsmanService.query().eq("id", craftsmanId).one();
             WorkShopVO workShopVO = convertToVO(workShop);
-            workShopVO.setCraftsmanName(craftsman.getName());
-            workShopVO.setCraftsmanPhone(craftsman.getPhone());
-            workShopVO.setCraftsmanEmail(craftsman.getEmail());
             workShopVOList.add(workShopVO);
         });
-
-        stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(workShopVOList),10, TimeUnit.MINUTES);
         PageBean pageBean = new PageBean(workShopList.getTotal(),workShopVOList);
+        if (!isCondition){
+            stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),10, TimeUnit.MINUTES);
+        }
 
         return Result.success(pageBean);
     }
@@ -103,8 +115,8 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
         try{
             String workShopStr = stringRedisTemplate.opsForValue().get("workshop:craftsmanId:" + craftsmanId);
             if (workShopStr != null){
-                if ("".equals(workShopStr)){
-                    return Result.error("您还未创建工作室!");
+                if (workShopStr.isEmpty()){
+                    return Result.error("您还未创建工作室");
                 }
                 return Result.success(JSON.parseObject(workShopStr,WorkShopVO.class));
             }
@@ -115,13 +127,9 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
         WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
         if (workShop == null){
             stringRedisTemplate.opsForValue().set("workshop:craftsmanId:"+craftsmanId,"null", Duration.ofMinutes(5));
-            return Result.error("您还未创建工作室!");
+            return Result.error("您还未创建工作室");
         }
         WorkShopVO workShopVO = convertToVO(workShop);
-        Craftsman craftsman = craftsmanService.query().eq("id", workShop.getCraftsmanId()).one();
-        workShopVO.setCraftsmanName(craftsman.getName());
-        workShopVO.setCraftsmanPhone(craftsman.getPhone());
-        workShopVO.setCraftsmanEmail(craftsman.getEmail());
         return Result.success(workShopVO);
     }
 
@@ -155,16 +163,18 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     public Result getWorkShopDetail(Long id) {
         WorkShop workShop = query().eq("id", id).one();
         if (workShop == null){
-            return Result.error("未找到工作室信息!");
+            return Result.error("未找到工作室信息");
         }
-        return Result.success(workShop);
+
+        WorkShopVO workShopVO = convertToVO(workShop);
+        return Result.success(workShopVO);
     }
 
     @Override
     public Result visitWorkShop(Long id) {
         WorkShop workShop = query().eq("id", id).one();
         if (workShop == null){
-            return Result.error("未找到工作室信息!");
+            return Result.error("未找到工作室信息");
         }
         new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getId,id).set(WorkShop::getVisitCount,workShop.getVisitCount() + 1).update();
         return Result.success();
@@ -173,7 +183,7 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     @Override
     @UpdateBloomFilter
     public Result collectWorkShop(Long workShopId) {
-        Long userId = AuthContext.getUserId();
+        Long userId = StpKit.USER.getLoginIdAsLong();
         if (userId == null) {
             throw new BusinessException("请先登录");
         }
@@ -187,14 +197,104 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     @Override
+    public Result getWorkShopStatus(Long craftsmanId) {
+        Craftsman craftsman = craftsmanService.query().eq("id", craftsmanId).one();
+        try{
+            String statusStr = stringRedisTemplate.opsForValue().get("workshop:status:" + craftsman.getWorkshopId());
+            if (statusStr != null){
+                if (statusStr.isEmpty()){
+                    return Result.error("未找到对应工作室");
+                }
+                return Result.success(Integer.parseInt(statusStr));
+            }
+        } catch (RuntimeException e) {
+            throw new RuntimeException(e);
+        }
+        WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
+        if (workShop != null){
+            stringRedisTemplate.opsForValue().set("workshop:status:" + workShop.getId(),workShop.getStatus().toString(),Duration.ofMinutes(15));
+            return Result.success(workShop.getStatus());
+        }
+        return Result.error("未找到对应工作室");
+    }
+
+    @Override
+    public void viewWorkShop(Long id) {
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        try {
+            String today = LocalDateTime.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+            String viewKey = "workshop:view:" + id + ":" + today;
+
+            Boolean isMember = stringRedisTemplate.opsForSet().isMember(viewKey, userId.toString());
+            if (Boolean.TRUE.equals(isMember)) {
+                log.info("用户{}今天已查看过工作室{}", userId, id);
+                return;
+            }
+            stringRedisTemplate.opsForSet().add(viewKey, userId.toString());
+            long secondsUntilMidnight  = getSecondsUntilTomorrowMidnight();
+            stringRedisTemplate.expire(viewKey,secondsUntilMidnight, TimeUnit.SECONDS);
+            boolean success = update(new LambdaUpdateWrapper<WorkShop>()
+                    .eq(WorkShop::getId, id)
+                    .setSql("visit_count = visit_count + 1"));
+            if (success) {
+                log.info("工作室id为：{} 工作室浏览量+1", id);
+            }
+        }catch (Exception e){
+            log.warn("记录工作室{}浏览量发生异常，用户{}：{}", id, userId, e.getMessage());
+        }
+    }
+
+    @Override
+    public Result<PageBean<WorkShopVO>> frontPage(PageQuery query) {
+        List<WorkShopVO> list = workShopMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()),
+                        new LambdaQueryWrapper<WorkShop>()
+                                .like(query.getKeyword() != null, WorkShop::getWorkshopName, query.getKeyword())
+                                .eq(WorkShop::getReviewStatus, WorkShopStatusEnum.APPROVE.getCode())
+                                .orderByDesc(WorkShop::getVisitCount))
+                .getRecords()
+                .stream()
+                .map(this::convertToVO)
+                .toList();
+        PageBean<WorkShopVO> pageBean = new PageBean<>((long)list.size(), list);
+        return Result.success(pageBean);
+    }
+
+    @Override
+    public Result<Boolean> checkCollect(Long workShopId) {
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        if (userId == null) {
+            throw new BusinessException("请先登录");
+        }
+        UserCollect userCollect = userCollectMapper.selectOne(
+                new LambdaQueryWrapper<UserCollect>()
+                        .eq(UserCollect::getUserId, userId)
+                        .eq(UserCollect::getWorkShopId, workShopId));
+        return Result.success(userCollect != null);
+    }
+
+    private long getSecondsUntilTomorrowMidnight(){
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime tomorrowMidnight = now.toLocalDate().plusDays(1).atStartOfDay();
+        return Duration.between(now, tomorrowMidnight).getSeconds() + 3600;
+    }
+
+    @Override
     public Result setWorkShopStatus(Long craftsmanId, Integer status) {
         WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
         if (workShop == null){
-            return Result.error("未找到对应工作室!");
+            return Result.error("未找到对应工作室");
         }
-        boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getCraftsmanId, craftsmanId).set(WorkShop::getStatus, status).update();
+        boolean success = new LambdaUpdateChainWrapper<>(workShopMapper)
+                .eq(WorkShop::getCraftsmanId, craftsmanId)
+                .set(WorkShop::getStatus, status)
+                .update();
         if (success){
-            stringRedisTemplate.keys("workshop:page:*").forEach(key -> stringRedisTemplate.delete(key));
+            try{
+                stringRedisTemplate.keys("workshop:page:*").forEach(stringRedisTemplate::delete);
+                stringRedisTemplate.opsForValue().set("workshop:status:" + workShop.getId(),status.toString(),Duration.ofMinutes(15));
+            } catch (RuntimeException e) {
+                throw new RuntimeException(e);
+            }
             return Result.success();
         }
         return null;
@@ -206,13 +306,10 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
         WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
         BeanUtils.copyProperties(workShopDTO,workShop);
         updateById(workShop);
-        stringRedisTemplate.keys("workshop:page:*").forEach(key -> stringRedisTemplate.delete(key));
-        return Result.success("修改成功!");
+        stringRedisTemplate.keys("workshop:page:*").forEach(stringRedisTemplate::delete);
+        return Result.success("修改成功");
 
     }
-
-
-
 
     @Override
     public Result selectWorkShopName(String workshopName) {
@@ -221,15 +318,22 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     public WorkShopVO convertToVO(WorkShop workShop) {
-        return WorkShopVO.builder()
-                .id(workShop.getId())
-                .workshopName(workShop.getWorkshopName())
-                .workshopLogo(workShop.getWorkshopLogo())
-                .location(workShop.getLocation())
-                .status(workShop.getStatus())
-                .reviewStatus(workShop.getReviewStatus())
-                .story(workShop.getStory())
-                .build();
+        WorkShopVO workShopVO = new WorkShopVO();
+        BeanUtils.copyProperties(workShop,workShopVO);
+        Craftsman craftsman = craftsmanService.query().eq("id", workShop.getCraftsmanId()).one();
+        workShopVO.setCraftsmanName(craftsman.getName());
+        workShopVO.setCraftsmanPhone(craftsman.getPhone());
+        workShopVO.setCraftsmanEmail(craftsman.getEmail());
+        List<Product> productList = productService.query().eq("craftsman_id", workShop.getCraftsmanId()).list();
+        List<ProductVO> products = new ArrayList<>();
+        productList.forEach(product -> {
+            ProductVO productVO = new ProductVO();
+            BeanUtils.copyProperties(product,productVO);
+            productVO.setCraftsmanName(craftsman.getName());
+            products.add(productVO);
+        });
+        workShopVO.setProducts(products);
+        return workShopVO;
     }
 
 }

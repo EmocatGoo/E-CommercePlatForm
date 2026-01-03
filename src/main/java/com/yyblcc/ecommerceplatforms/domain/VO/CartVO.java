@@ -12,6 +12,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class CartVO {
+    private Long id;
     private Integer itemCount;
     private Integer checkedCount;
     private List<CartItemVO> items;

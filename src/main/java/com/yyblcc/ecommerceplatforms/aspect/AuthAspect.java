@@ -23,7 +23,6 @@ public class AuthAspect {
 
     @Around("pointcut(requireRole)")
     public Object around(ProceedingJoinPoint joinPoint, RequireRole requireRole) throws Throwable {
-        // 从AuthContext获取角色信息，AuthInterceptor已经验证过登录状态
         RoleEnum role = AuthContext.getRole();
         Long userId = AuthContext.getUserId();
         

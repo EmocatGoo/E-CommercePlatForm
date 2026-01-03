@@ -13,5 +13,5 @@ public class AddCartDTO {
     private Integer quantity;
 
     // 是否默认选中，默认 true
-    private Boolean isChecked;
+    private Boolean checked;
 }

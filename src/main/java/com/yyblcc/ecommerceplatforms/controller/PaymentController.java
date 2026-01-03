@@ -44,7 +44,5 @@ public class PaymentController {
     public Result<String> closeOrder(@RequestBody List<String> orderSn) {
         return paymentService.closeOrder(orderSn);
     }
-//    保留
-//    public Result chargeUserAmount()
 
 }

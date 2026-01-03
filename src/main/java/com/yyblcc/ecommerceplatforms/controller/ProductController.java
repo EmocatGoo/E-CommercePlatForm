@@ -1,14 +1,15 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
-import com.yyblcc.ecommerceplatforms.domain.VO.ProductDetailVO;
 import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.ProductQuery;
 import com.yyblcc.ecommerceplatforms.service.ProductService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +18,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/product")
 @Slf4j
+@RequiredArgsConstructor
 public class ProductController {
-
-    @Autowired
-    private ProductService productService;
+    private final ProductService productService;
+    private final StringRedisTemplate stringRedisTemplate;
 
     /**
      * 分页查询商品列表（管理员后台用）
@@ -30,11 +31,17 @@ public class ProductController {
         return Result.success(productService.adminPage(query));
     }
 
+    @PutMapping("/{id}")
+    public Result updateProduct(@RequestBody @Validated ProductDTO productDTO){
+        log.info("修改商品信息:{}", productDTO);
+        return productService.updateProduct(productDTO);
+    }
+
     /**
      * 审核商品（通过 / 拒绝）
      */
     @PutMapping("/review")
-    public Result review(ProductDTO reviewDTO) {
+    public Result review(@RequestBody ProductDTO reviewDTO) {
         // status: 1-审核通过 2-审核拒绝 0-下架
         productService.review(reviewDTO);
         return Result.success();
@@ -44,8 +51,14 @@ public class ProductController {
      * 管理员强制下架商品
      */
     @PutMapping("/offline")
-    public Result offline(@RequestParam Long productId) {
+    public Result offline(@RequestParam("productId") Long productId) {
         productService.changeStatus(productId, 0);
+        return Result.success();
+    }
+
+    @PutMapping("/upline")
+    public Result upline(@RequestParam("productId") Long productId) {
+        productService.changeStatus(productId, 1);
         return Result.success();
     }
 
@@ -55,6 +68,14 @@ public class ProductController {
     @DeleteMapping("/batch")
     public Result batchDelete(@RequestBody List<Long> ids) {
         productService.removeByIds(ids);
+        stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
+        return Result.success();
+    }
+
+    @DeleteMapping("/{id}")
+    public Result delete(@PathVariable("id") Long id) {
+        productService.removeById(id);
+        stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
         return Result.success();
     }
 
@@ -63,10 +84,7 @@ public class ProductController {
      */
     @PostMapping("/save")
     public Result save(@RequestBody @Validated ProductDTO dto) {
-        // 从登录信息中获取匠人ID
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 当前为测试模式，记得修改！！！
-        Long craftsmanId = 2L;
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         productService.craftsmanSave(dto, craftsmanId);
         return Result.success("提交成功，待管理员审核");
     }
@@ -76,46 +94,38 @@ public class ProductController {
      */
     @PutMapping("/update")
     public Result update(@RequestBody @Validated ProductDTO dto) {
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 当前为测试模式，记得修改！！！
-        Long craftsmanId = 2L;
-        productService.craftsmanUpdate(dto, craftsmanId);
-        return Result.success();
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        return productService.craftsmanUpdate(dto, craftsmanId);
     }
 
     /**
      * 匠人查看自己的商品列表
      */
     @GetMapping("/my/page")
-    public Result<PageBean> myPage(@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "10") Integer pageSize) {
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 当前为测试模式，记得修改！！！
-        Long craftsmanId = 2L;
-        return productService.myPage(page, pageSize, craftsmanId);
+    public Result<PageBean> myPage(ProductQuery query) {
+        log.info("匠人获取商品信息:{}", query);
+        return productService.myPage(query);
     }
 
     /**
      * 匠人下架自己的商品（已上架状态才允许）
      */
-    @PutMapping("/my/offline")
-    public Result myOffline(@RequestParam Long productId) {
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 当前为测试模式，记得修改！！！
-        Long craftsmanId = 2L;
-        productService.craftsmanOffline(productId, craftsmanId);
-        return Result.success();
+    @PutMapping("/my/productStatus")
+    public Result myOffline(@RequestParam("productId") Long productId) {
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        return productService.craftsmanOffline(productId, craftsmanId);
     }
 
     /**
-     * 前台商品详情页（最重要的页面！要富含文化背景）
+     * 前台商品详情页
      */
     @GetMapping("/detail/{id}")
-    public Result<ProductDetailVO> detail(@PathVariable Long id) {
+    public Result<ProductListVO> detail(@PathVariable Long id) {
         return Result.success(productService.getDetail(id));
     }
 
     /**
-     * 前台用户端商品列表页（分类筛选 + 推荐）
+     * 前台用户端商品列表页
      */
     @GetMapping("/list")
     public Result<PageBean<ProductListVO>> list(ProductQuery search) {
@@ -126,12 +136,12 @@ public class ProductController {
      * 首页推荐商品（热门非遗好物）
      */
     @GetMapping("/recommend")
-    public Result<List<ProductListVO>> recommend(@RequestParam(defaultValue = "8") Integer size) {
-        return Result.success(productService.recommend(size));
+    public Result<List<ProductListVO>> recommend(@RequestParam(defaultValue = "4") Integer size) {
+        return productService.recommend(size);
     }
 
     /**
-     * 根据匠人ID获取其所有上架商品（进入匠人工作室页面时使用）
+     * 根据匠人ID获取其所有上架商品
      */
     @GetMapping("/by-craftsman/{craftsmanId}")
     public Result<List<ProductListVO>> byCraftsman(@PathVariable Long craftsmanId) {
@@ -143,8 +153,8 @@ public class ProductController {
      * @param productId
      * @return
      */
-    @PostMapping("/like/{productId}")
-    public Result like(@PathVariable Long productId) {
+    @PostMapping("/like")
+    public Result like(@RequestParam Long productId) {
         return productService.like(productId);
     }
 
@@ -153,19 +163,18 @@ public class ProductController {
      * @param productId
      * @return
      */
-    @PostMapping("/favorite/{productId}")
-    public Result collect(@PathVariable Long productId) {
+    @PostMapping("/favorite")
+    public Result collect(@RequestParam Long productId) {
         return productService.favorite(productId);
     }
 
     /**
      * 用户获取我收藏的商品
-     * @param productId
      * @return
      */
     @GetMapping("/myFavorite")
-    public Result<List<ProductListVO>> myFavorite(@RequestParam Long productId) {
-        return productService.getMyFavorite(productId);
+    public Result<List<ProductListVO>> myFavorite() {
+        return productService.getMyFavorite();
     }
 
     /**
@@ -176,6 +185,17 @@ public class ProductController {
     @GetMapping("/myLike")
     public Result<List<ProductListVO>> myLike(@RequestParam Long productId) {
         return productService.getMyLike(productId);
+    }
+
+    @GetMapping("/studioInfo")
+    public Result<?> getProductWorkShop(@RequestParam Long productId){
+        log.info("productId={}", productId);
+        return productService.getProductWorkShop(productId);
+    }
+
+    @GetMapping("/referRecommend")
+    public Result<List<ProductListVO>> referRecommend(@RequestParam Long productId) {
+        return productService.referRecommend(productId);
     }
 
 }

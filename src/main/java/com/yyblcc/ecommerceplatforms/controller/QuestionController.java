@@ -6,6 +6,7 @@ import com.yyblcc.ecommerceplatforms.domain.po.Question;
 import com.yyblcc.ecommerceplatforms.domain.po.QuestionRecord;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.QuestionQuery;
 import com.yyblcc.ecommerceplatforms.service.QuestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,7 @@ public class QuestionController {
     private final QuestionService questionService;
 
     @GetMapping("/page")
-    public Result page(PageQuery query) {
+    public Result page(QuestionQuery query) {
         log.info("条件分页查询信息:{}", query);
         return questionService.listQuestion(query);
     }

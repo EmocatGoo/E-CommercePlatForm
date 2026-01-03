@@ -95,4 +95,17 @@ public class CategoryController {
         }
         return Result.success(category);
     }
+
+    @GetMapping("/selectHeritageArticleCategory")
+    public Result<?> selectHeritageArticleCategory() {
+        log.info("查询非遗文化分类");
+        return categoryService.selectHeritageArticleCategory();
+    }
+
+    @GetMapping("/selectCultureGameCategory")
+    public Result<?> selectCultureGameCategory() {
+        log.info("查询文化游戏分类");
+        return categoryService.selectCultureGameCategory();
+    }
+
 }

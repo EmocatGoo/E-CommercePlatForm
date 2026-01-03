@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 public class EventVO {
     private Long id;
     private String title;
+    private String description;
+    private String eventDetail;
     private String coverImage;
     private Integer status;
     private Integer eventType;
@@ -25,4 +27,6 @@ public class EventVO {
     private LocalDateTime endTime;
     private LocalDateTime createTime;
     private String location;
+
+    private Boolean userApplied;
 }

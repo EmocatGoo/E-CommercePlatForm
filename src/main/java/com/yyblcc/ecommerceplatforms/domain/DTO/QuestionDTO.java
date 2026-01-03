@@ -13,6 +13,7 @@ public class QuestionDTO {
     private List<OptionItem> options;
     @NotBlank
     private String answer;
+    private Integer questionType;
 
     private Long categoryId;
 }

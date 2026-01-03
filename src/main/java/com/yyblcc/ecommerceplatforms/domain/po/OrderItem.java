@@ -1,9 +1,7 @@
 package com.yyblcc.ecommerceplatforms.domain.po;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.github.yulichang.annotation.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,12 +10,13 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@TableName("tb_order_item")
+@TableName(value = "tb_order_item")
 public class OrderItem {
     @TableId(type = IdType.AUTO)
     private Long id;

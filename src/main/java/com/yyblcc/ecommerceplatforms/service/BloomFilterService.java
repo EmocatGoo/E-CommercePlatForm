@@ -83,7 +83,7 @@ public class BloomFilterService {
 
             List<Event> eventList = eventMapper.selectList(null);
             eventList.forEach(event -> cacheClient.addToBloomFilter(event.getId()));
-            log.info("已添加 {} 个活动ID到布隆过滤器",paymentList.size());
+            log.info("已添加 {} 个活动ID到布隆过滤器",eventList.size());
 
             log.info("布隆过滤器初始化完成");
         } catch (Exception e) {

@@ -10,6 +10,7 @@ import com.yyblcc.ecommerceplatforms.mapper.CartItemMapper;
 import com.yyblcc.ecommerceplatforms.mapper.CartMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.spring.annotation.ConsumeMode;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,8 @@ import java.util.List;
 
 @RocketMQMessageListener(
         topic = "cart-delete-topic",
-        consumerGroup = "cart-delete-group"
+        consumerGroup = "cart-delete-group",
+        consumeMode = ConsumeMode.CONCURRENTLY
 )
 @Service
 @RequiredArgsConstructor
@@ -45,25 +47,25 @@ public class CartDeleteListener implements RocketMQListener<CartDeleteMessage> {
 
             if (cartItems == null || cartItems.isEmpty()) {
                 log.warn("无可删除商品!");
+                return;
             }
             int totalQuantity = 0;
             int checkedQuantity = 0;
             for (CartItem cartItem : cartItems) {
                 totalQuantity += cartItem.getQuantity();
-                if (cartItem.getIsChecked() != null && cartItem.getIsChecked() == 1){
+                if (cartItem.getChecked() != null && cartItem.getChecked().equals(1)){
                     checkedQuantity += cartItem.getQuantity();
                 }
             }
 
-            int deletedRows = cartItemMapper.update(new LambdaUpdateWrapper<CartItem>()
+            int deletedRows = cartItemMapper.delete(new LambdaUpdateWrapper<CartItem>()
                     .eq(CartItem::getUserId, userId)
-                    .in(CartItem::getProductId, productIds)
-                    .set(CartItem::getIsDeleted, 1));
+                    .in(CartItem::getProductId, productIds));
 
             if (totalQuantity > 0 && totalQuantity == deletedRows) {
                 cartMapper.update(new LambdaUpdateWrapper<Cart>()
                         .eq(Cart::getUserId, userId)
-                        .setSql("item_count = item_count - " + totalQuantity)
+                        .setSql("item_count = GREATEST(item_count - " + totalQuantity + ", 0)")
                         .setSql("checked_count = GREATEST(checked_count - " + checkedQuantity + ", 0)"));
             }
         }catch (Exception e){

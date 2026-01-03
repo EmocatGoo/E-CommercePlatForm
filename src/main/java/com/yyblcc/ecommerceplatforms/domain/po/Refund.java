@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.domain.po;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -16,7 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@TableName("tb_order_refund")
+@TableName(value = "tb_order_refund", autoResultMap = true)
 public class Refund {
     @TableId
     private Long id;
@@ -34,7 +35,8 @@ public class Refund {
     private BigDecimal refundAmount;
     private String applyReason;
     private String applyDesc;
-    private List<String> applyImage;
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private List<String> applyImages;
 
     private Integer refundStatus;
     private Integer refundType;
@@ -50,6 +52,8 @@ public class Refund {
     private Long platformHandleBy;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    private String paySn;
 
     @TableLogic
     private Integer isDeleted;

@@ -1,6 +1,9 @@
 package com.yyblcc.ecommerceplatforms.listener;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.yyblcc.ecommerceplatforms.constant.StatusConstant;
 import com.yyblcc.ecommerceplatforms.domain.message.CheckMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.Cart;
 import com.yyblcc.ecommerceplatforms.domain.po.CartItem;
@@ -39,7 +42,7 @@ public class ToggleCheckListener implements RocketMQListener<CheckMessage> {
         int quantity = checkMessage.getQuantity();
         int delta;
         try{
-            CartItem item = cartItemMapper.selectOne(Wrappers.<CartItem>lambdaQuery()
+            CartItem item = cartItemMapper.selectOne(new LambdaQueryWrapper<CartItem>()
                     .eq(CartItem::getUserId, checkMessage.getUserId())
                     .eq(CartItem::getProductId, checkMessage.getProductId()));
             if (item == null) {
@@ -48,23 +51,28 @@ public class ToggleCheckListener implements RocketMQListener<CheckMessage> {
             }
 
             if (checked) {
-                if (item.getIsChecked() == null || item.getIsChecked() == 0) {
+                if (item.getChecked() == null || item.getChecked().equals(StatusConstant.DISABLE)) {
                     delta = quantity;
                 }else {
                     delta = 0;
                 }
             }else{
-                if (item.getIsChecked() != null && item.getIsChecked() == 1) {
+                if (item.getChecked() != null && item.getChecked().equals(StatusConstant.ENABLE)) {
                     delta = -quantity;
                 }else{
                     delta = 0;
                 }
             }
             //更新勾选状态
-            cartItemMapper.update(Wrappers.<CartItem>lambdaUpdate().eq(CartItem::getUserId,userId).set(CartItem::getIsChecked, checked ? 1:0));
+            cartItemMapper.update(new LambdaUpdateWrapper<CartItem>()
+                    .eq(CartItem::getUserId,userId)
+                    .eq(CartItem::getProductId,productId)
+                    .set(CartItem::getChecked, checked ? 1:0));
             //数量有变化，需要更新购物车
             if (delta != 0){
-                cartMapper.update(Wrappers.<Cart>lambdaUpdate().eq(Cart::getUserId,userId).setSql("checked_count = checked_count + " + delta));
+                cartMapper.update(new LambdaUpdateWrapper<Cart>()
+                        .eq(Cart::getUserId,userId)
+                        .setSql("checked_count = checked_count + " + delta));
                 log.info("用户 {} 商品 {} 勾选状态更新成功 → {}, checked_count 变化: {}",
                         userId, productId, checked, delta);
             }

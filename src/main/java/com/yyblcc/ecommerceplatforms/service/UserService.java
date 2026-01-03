@@ -15,7 +15,7 @@ public interface UserService extends IService<User> {
 
     Result<?> delete(Long userId);
 
-    Result<?> updatePassword(PasswordDTO passwordDTO,HttpServletRequest request);
+    Result<?> updatePassword(PasswordDTO passwordDTO);
 
     Result<?> modifyProfile(UserUpdateDTO userUpdateDTO);
 
@@ -43,4 +43,9 @@ public interface UserService extends IService<User> {
 
     Result<?> setDefaultAddress(Long addressId);
 
+    Result<?> updateAvatar(String avatar);
+
+    Result<?> getUserCounts();
+
+    Result getUserDefaultAddress(Long userId);
 }

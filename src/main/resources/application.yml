@@ -5,7 +5,7 @@ spring:
 #MySQL配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/e-commerceplatform?serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/e-commerceplatform?serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&allowMultiQueries=true&useUnicode=true&characterEncoding=utf8
     username: root
     password: "031003"
 #允许循环依赖
@@ -14,15 +14,15 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 100MB
+      max-request-size: 500MB
       resolve-lazily: true
-#SpringMail配置
+  #SpringMail配置
   mail:
     host: smtp.qq.com          # QQ SMTP 服务器
     port: 587                  # STARTTLS 端口（或 465 SSL）
     username: 3165069523@qq.com
-    password: isgselvqtkuudebi # 你的授权码（16 位）
+    password: zthphngyxeuqddac # 你的授权码（16 位）
     properties:
       mail:
         smtp:
@@ -57,12 +57,14 @@ mybatis-plus:
       logic-delete-value: 1          # 逻辑已删除值
       logic-not-delete-value: 0
       type-enums-package: com.yyblcc.ecommerceplatforms.entity.Enum
+      type-handlers-package: com.baomidou.mybatisplus.extension.handlers
   configuration:
+    call-setters-on-nulls: true
     map-underscore-to-camel-case: true
 #Sa-Token配置
 sa-token:
   token-name: Authorization
-  timeout: 1800  # 30分钟，单位秒
+  timeout: 86400  # 1天，单位秒
   activit-timeout: -1  # -1表示永不过期
   is-concurrent: false  # 同一账号是否允许多处登录
   is-share: true  # 同一token是否在多人登录时共享
@@ -88,3 +90,11 @@ rustfs:
   access-key: rustfsadmin
   secret-key: rustfsadmin
   bucket-name: emall-bucket
+server:
+
+#MinIO
+#minio:
+#  endpoint: http://127.0.0.1:9000
+#  access-key: administrator
+#  secret-key: administrator
+#  bucket-name: emall-bucket

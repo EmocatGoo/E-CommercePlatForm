@@ -1,6 +1,7 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -25,7 +26,6 @@ import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.redis.AccountLockCheck;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.util.redis.CacheClient;
-import com.yyblcc.ecommerceplatforms.util.chainofresponsibility.FinalCheck;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +33,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.DigestUtils;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -131,25 +132,60 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
         return Result.success();
     }
 
-    @Override
-    public Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request) {
-        Long userId = AuthContext.getUserId();
-        if (userId == null) {
-            return Result.error("发生异常!");
-        }
-        User user = query().eq("id", userId).one();
-        if (user == null) {
-            stringRedisTemplate.opsForValue().set(USER_SEARCH_KEYPRIFIX + userId,"null",NULL_USER_KEY_TTL, TimeUnit.MINUTES);
-            return Result.error("未找到用户!");
-        }
-        if (passwordDTO.getOldPassword().equals(DigestUtils.md5DigestAsHex(user.getPassword().getBytes()))) {
-            user.setPassword(DigestUtils.md5DigestAsHex(passwordDTO.getNewPassword().getBytes()));
-            userMapper.update(user);
-        }
-        stringRedisTemplate.delete(USER_SEARCH_KEYPRIFIX + userId);
-        StpUtil.logout(userId);
-        return Result.success("密码更新成功!");
+@Override
+@Transactional(rollbackFor = Exception.class)
+public Result<?> updatePassword(PasswordDTO passwordDTO) {
+    Long userId = AuthContext.getUserId();
+    if (userId == null) {
+        return Result.error("发生异常");
     }
+    
+    // 先检查缓存中是否标记为null用户
+    try{
+        String cache = stringRedisTemplate.opsForValue().get(USER_SEARCH_KEYPRIFIX + userId);
+        if ("null".equals(cache)){
+            return Result.error("未找到用户");
+        }
+    } catch (Exception e) {
+        log.error("查询缓存异常", e);
+    }
+    
+    // 查询用户信息
+    User user = query().eq("id", userId).one();
+    if (user == null) {
+        try {
+            stringRedisTemplate.opsForValue().set(USER_SEARCH_KEYPRIFIX + userId, "null", NULL_USER_KEY_TTL, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            log.error("设置空值缓存异常", e);
+        }
+        return Result.error("未找到用户");
+    }
+    
+    // 验证旧密码是否正确
+    String oldPasswordMd5 = DigestUtils.md5DigestAsHex(passwordDTO.getOldPassword().getBytes(StandardCharsets.UTF_8));
+    if (!oldPasswordMd5.equals(user.getPassword())) {
+        return Result.error("原密码错误");
+    }
+    
+    // 更新密码
+    String newPasswordMd5 = DigestUtils.md5DigestAsHex(passwordDTO.getNewPassword().getBytes(StandardCharsets.UTF_8));
+    user.setPassword(newPasswordMd5);
+
+    if (!updateById(user)) {
+        return Result.error("密码更新失败");
+    }
+
+    // 清除缓存
+    try {
+        stringRedisTemplate.delete(USER_SEARCH_KEYPRIFIX + userId);
+    } catch (Exception e) {
+        log.error("清除用户缓存异常", e);
+    }
+
+    // 登出用户
+    StpKit.USER.logout(userId);
+    return Result.success("密码更新成功");
+}
 
     @Override
     public Result<?> modifyProfile(UserUpdateDTO userUpdateDTO) {
@@ -169,14 +205,16 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
 
         // 更新字段
         BeanUtils.copyProperties(userUpdateDTO, user, "id", "password");
-        updateById(user);
+        if(updateById(user)){
+            User newDbUser = getById(userId);
+            // 更新缓存
+            UserVO userVO = new UserVO();
+            BeanUtils.copyProperties(newDbUser, userVO);
+            stringRedisTemplate.opsForValue().set(key, JSON.toJSONString(userVO), USER_SEARCH_TTL, TimeUnit.MINUTES);
+            return Result.success(userVO);
+        }
 
-        // 更新缓存
-        UserVO userVO = new UserVO();
-        BeanUtils.copyProperties(user, userVO);
-        stringRedisTemplate.opsForValue().set(key, JSON.toJSONString(userVO), USER_SEARCH_TTL, TimeUnit.MINUTES);
-
-        return Result.success("修改成功");
+        return Result.error("更新失败！");
     }
 
     @Override
@@ -244,7 +282,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
                 .status(userStatusDTO.getStatus())
                 .rejectReason(userStatusDTO.getRejectReason())
                 .build();
-        userMapper.update(user);
+        userMapper.updateById(user);
         try {
             stringRedisTemplate.keys("user:page:*").forEach(key ->{stringRedisTemplate.delete(key);});
         }catch (Exception e){
@@ -352,7 +390,12 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
             userAddressMapper.updateById(address);
         });
         if (new LambdaUpdateChainWrapper<>(userAddressMapper).eq(UserAddress::getId, addressId).set(UserAddress::getIsDefault, 1).update()){
-            return Result.success("设置成功!");
+            User user = query().eq("id", userId).one();
+            if (!ObjectUtil.isNull(user)){
+                user.setDefaultAddressId(addressId);
+                updateById(user);
+                return Result.success("设置成功!");
+            }
         }
         return Result.error("设置失败!");
     }
@@ -411,11 +454,11 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
     private UserVO setSession(User user) {
         UserVO userVO = convertToVO(user);
         // 使用StpKit.USER进行登录，实现用户会话隔离
-        com.yyblcc.ecommerceplatforms.util.StpKit.USER.login(user.getId());
+        StpKit.USER.login(user.getId());
         // 将用户信息和角色存储到对应的Session中
-        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("USER", userVO);
-        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("ROLE", RoleEnum.USER);
-        com.yyblcc.ecommerceplatforms.util.StpKit.USER.getSession().set("USER_ID", user.getId());
+        StpKit.USER.getSession().set("USER", userVO);
+        StpKit.USER.getSession().set("ROLE", RoleEnum.USER);
+        StpKit.USER.getSession().set("USER_ID", user.getId());
         return userVO;
     }
 
@@ -436,5 +479,52 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
                 .build();
     }
 
+    /**
+     * 更新用户头像
+     * @param avatar 头像 URL
+     * @return
+     */
+    @Override
+    public Result<?> updateAvatar(String avatar) {
+        try {
+            // 从 SaToken 获取当前登录的用户 ID
+            Long userId = StpKit.USER.getLoginIdAsLong();
+            
+            // 查询用户
+            User user = query().eq("id", userId).one();
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
+            
+            // 更新头像
+            user.setAvatar(avatar);
+            if (updateById(user)) {
+                log.info("用户 {} 更新头像成功: {}", userId, avatar);
+                UserVO userVO = convertToVO(user);
+                return Result.success(userVO);
+            }
+            
+            return Result.error("头像更新失败");
+        } catch (Exception e) {
+            log.error("更新用户头像失败", e);
+            return Result.error("头像更新失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public Result<?> getUserCounts() {
+        Long count = userMapper.selectCount(null);
+        return Result.success(count);
+    }
+
+    @Override
+    public Result<?> getUserDefaultAddress(Long userId) {
+        UserAddress userAddress = userAddressMapper.selectOne(new LambdaQueryWrapper<UserAddress>().eq(UserAddress::getUserId, userId)
+                .eq(UserAddress::getIsDefault, 1));
+        if (userAddress != null) {
+            return Result.success(userAddress);
+        }
+        return Result.error("用户没有默认地址");
+    }
 
 }

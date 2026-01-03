@@ -18,4 +18,8 @@ public interface CategoryService extends IService<Category> {
     Result batchDeleteCategory(List<Long> ids);
 
     Result updateCategory(CategoryDTO categoryDTO);
+
+    Result<?> selectHeritageArticleCategory();
+
+    Result<?> selectCultureGameCategory();
 }

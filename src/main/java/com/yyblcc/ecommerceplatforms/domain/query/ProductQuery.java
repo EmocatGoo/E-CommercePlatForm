@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class ProductQuery {
     private String keyword;
     private Integer categoryId;
+    private Integer status;
     @Min(1)
     private Integer page;
     @Min(1)

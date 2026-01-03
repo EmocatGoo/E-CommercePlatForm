@@ -6,6 +6,7 @@ import com.yyblcc.ecommerceplatforms.domain.DTO.AdminDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.LoginDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import com.yyblcc.ecommerceplatforms.service.AdminService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,6 +59,7 @@ public class AdminController {
         return adminService.updateAdmin(adminDTO);
     }
 
+
     /**
      * 删除管理员，只有超级管理员有权限
      * @param id
@@ -91,14 +93,13 @@ public class AdminController {
 
     /**
      * 分页查询管理员
-     * @param page
-     * @param pageSize
+     * @param query
      * @return
      */
     @GetMapping("/page")
-    public Result<PageBean> page(@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "5")Integer pageSize){
-        log.info("page={},pageSize={}", page, pageSize);
-        return adminService.page(page,pageSize);
+    public Result<PageBean> page(PageQuery query){
+        log.info("page={},pageSize={}", query.getPage(), query.getPageSize());
+        return adminService.pageAdmins(query);
     }
 
     /**
@@ -108,13 +109,13 @@ public class AdminController {
      * @return
      */
     @PostMapping("/login")
-    public Result login(@RequestBody LoginDTO loginDTO, HttpServletRequest request){
+    public Result<?> login(@RequestBody LoginDTO loginDTO, HttpServletRequest request){
         log.info("login={}", loginDTO);
         return adminService.login(loginDTO,request);
     }
 
     @PostMapping("/logout")
-    public Result logout(){
+    public Result<?> logout(){
         Long adminId = StpKit.ADMIN.getLoginIdAsLong();
         log.info("管理员 {} 登出", adminId);
         StpKit.ADMIN.logout(adminId);
@@ -122,15 +123,26 @@ public class AdminController {
     }
 
     @PutMapping("/resetPassword")
-    public Result resetPassword(@RequestParam("adminId") Long adminId){
+    public Result<?> resetPassword(@RequestParam("adminId") Long adminId){
         log.info("adminId={}", adminId);
         return adminService.resetPassword(adminId);
     }
 
     @GetMapping("/nameselect")
-    public Result nameselect(@RequestParam String name,@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "1") Integer pageSize){
+    public Result<?> nameselect(@RequestParam String name,@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "1") Integer pageSize){
         log.info("name= {},page={},pageSize={}",name, page, pageSize);
         return adminService.getAdminByName(name,page,pageSize);
+    }
+
+    /**
+     * 更新管理员头像
+     * @param avatar 头像 URL
+     * @return
+     */
+    @PutMapping("/updateAvatar")
+    public Result<?> updateAvatar(@RequestParam("avatar") String avatar) {
+        log.info("更新管理员头像: avatar={}", avatar);
+        return adminService.updateAvatar(avatar);
     }
 
 }

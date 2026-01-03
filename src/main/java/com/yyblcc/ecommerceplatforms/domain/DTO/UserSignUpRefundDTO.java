@@ -2,12 +2,13 @@ package com.yyblcc.ecommerceplatforms.domain.DTO;
 
 import lombok.Data;
 
+import java.io.Serializable;
 import java.util.List;
 
 @Data
 public class UserSignUpRefundDTO {
     private String paySn;
-    private Long productId;
+    private List<Long> productIds;
     private String refundReason;
     //具体退款说明
     private String refundDesc;

@@ -16,9 +16,11 @@ import com.yyblcc.ecommerceplatforms.domain.po.Question;
 import com.yyblcc.ecommerceplatforms.domain.po.QuestionRecord;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.QuestionQuery;
 import com.yyblcc.ecommerceplatforms.mapper.QuestionMapper;
 import com.yyblcc.ecommerceplatforms.mapper.QuestionRecordMapper;
 import com.yyblcc.ecommerceplatforms.service.QuestionService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -37,25 +39,31 @@ public class QuestionServiceImplement extends ServiceImpl<QuestionMapper, Questi
     private final StringRedisTemplate stringRedisTemplate;
     private final QuestionRecordMapper questionRecordMapper;
     @Override
-    public Result listQuestion(PageQuery query) {
+    public Result listQuestion(QuestionQuery query) {
+        boolean isCondition = query.getKeyword() != null && !query.getKeyword().isEmpty() || query.getQuestionType() != null;
         String key = "question:page:"+query.getPage()+":"+query.getPageSize();
-        try{
-            String jsonStr = stringRedisTemplate.opsForValue().get(key);
-            if (jsonStr != null){
-                if (jsonStr.isEmpty()){
-                    return Result.success();
+        if (!isCondition){
+            try{
+                String jsonStr = stringRedisTemplate.opsForValue().get(key);
+                if (jsonStr != null){
+                    if (jsonStr.isEmpty()){
+                        return Result.success();
+                    }
+                    return Result.success(JSON.parseObject(jsonStr, PageBean.class));
                 }
-                return Result.success(JSON.parseObject(jsonStr, PageBean.class));
+            } catch (RuntimeException e) {
+                throw new RuntimeException(e);
             }
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
         }
         Page<Question> questions = questionMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()),
                 new LambdaQueryWrapper<Question>()
+                        .eq(query.getQuestionType() != null, Question::getQuestionType, query.getQuestionType())
                         .like(query.getKeyword()!= null, Question::getTitle, query.getKeyword())
-                        .orderByDesc(Question::getCreateTime));
+                        .orderByAsc(Question::getCreateTime));
         PageBean pageBean = new PageBean<>(questions.getTotal(), questions.getRecords());
-        stringRedisTemplate.opsForValue().set(key, JSON.toJSONString(pageBean), Duration.ofMinutes(10));
+        if (!isCondition){
+            stringRedisTemplate.opsForValue().set(key, JSON.toJSONString(pageBean), Duration.ofMinutes(10));
+        }
         return Result.success(pageBean);
     }
 
@@ -122,19 +130,11 @@ public class QuestionServiceImplement extends ServiceImpl<QuestionMapper, Questi
 
     @Override
     public Result startQuiz(Integer count, Long categoryId) {
-//        Long userId = AuthContext.getUserId();
-        //TODO 测试环境，记得删除
-        Long userId = 4L;
-        String hashKey = "quiz:question:"+userId;
-        try{
-            Map<Object, Object> userQuestionMap = stringRedisTemplate.opsForHash().entries(hashKey);
-            if (MapUtil.isNotEmpty(userQuestionMap)){
-                return Result.error("请勿重复开始 quiz");
-            }
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        if (userId == null) {
+            return Result.error("用户未登录");
         }
-        List<Long> questionIds =questionMapper.selectList(new LambdaQueryWrapper<Question>()
+        List<Long> questionIds = questionMapper.selectList(new LambdaQueryWrapper<Question>()
                         .eq(Question::getCategoryId, categoryId))
                 .stream()
                 .map(Question::getId)
@@ -146,28 +146,16 @@ public class QuestionServiceImplement extends ServiceImpl<QuestionMapper, Questi
         if (questionIds.size() < count){
             count = questionIds.size();
         }
-        List<Long> randomIds = questionIds.subList(0, count);
-        List<Question> questions = questionMapper.selectBatchIds(randomIds);
-        List<QuestionVO> questionVOList = questions
-                .stream()
+        List<QuestionVO> questionVOs = questionMapper.selectBatchIds(questionIds.subList(0, count)).stream()
                 .map(this::convertToVO)
                 .toList();
-        Map<String, String> questionMap = questions.stream()
-                .collect(Collectors.toMap(question -> question.getId().toString(), Question::getAnswer, (a, b) -> b));
-        stringRedisTemplate.opsForHash().putAll(hashKey, questionMap);
-        stringRedisTemplate.expire(hashKey, Duration.ofMinutes(10));
-        return Result.success(questionVOList);
+        return Result.success(questionVOs);
     }
 
     @Override
     public Result submitQuiz(List<QuestionRecordDTO> records) {
-//        Long userId = AuthContext.getUserId();
-        Long userId = 4L;
-        String key = "quiz:question:"+userId;
-        if (CollUtil.isEmpty(records)){
-            return Result.error("未提交答题信息");
-        }
-        StringBuffer userSubmitAnswer = new StringBuffer();
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        StringBuilder userSubmitAnswer = new StringBuilder();
         for (int i = 0; i < records.size(); i++) {
             QuestionRecordDTO record = records.get(i);
             if (!userId.equals(record.getUserId())) {
@@ -189,24 +177,11 @@ public class QuestionServiceImplement extends ServiceImpl<QuestionMapper, Questi
                 .build();
         questionRecordMapper.insert(record);
         AtomicInteger correctCount = new AtomicInteger();
-        Map<Object, Object> cachedAnswers;
-        try{
-            cachedAnswers = stringRedisTemplate.opsForHash().entries(key);
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
-        }
+
         Map<Long,String> correctAnswers;
-        if (MapUtil.isNotEmpty(cachedAnswers)){
-            correctAnswers = cachedAnswers.entrySet().stream()
-                    .collect(Collectors.toMap(
-                            entry -> Long.valueOf(entry.getKey().toString()),
-                            entry -> entry.getValue().toString()
-                    ));
-        }else{
-            List<Question> questions = questionMapper.selectList(new LambdaQueryWrapper<Question>().in(Question::getId, questionIds));
-            correctAnswers = questions.stream()
-                    .collect(Collectors.toMap(Question::getId, Question::getAnswer));
-        }
+        List<Question> questions = questionMapper.selectList(new LambdaQueryWrapper<Question>().in(Question::getId, questionIds));
+        correctAnswers = questions.stream()
+                .collect(Collectors.toMap(Question::getId, Question::getAnswer));
         Map<Long,String> userAnswers = records.stream()
                 .collect(Collectors.toMap(QuestionRecordDTO::getQuestionId, QuestionRecordDTO::getAnswer));
         correctAnswers.forEach((questionId, answer) -> {
@@ -215,10 +190,21 @@ public class QuestionServiceImplement extends ServiceImpl<QuestionMapper, Questi
                 correctCount.incrementAndGet();
             }
         });
-        stringRedisTemplate.delete(key);
+        Map<String,String> correctAnswersVO = new HashMap<>();
+        correctAnswers.forEach((questionId, answer) -> {
+            Question question = questionMapper.selectOne(new LambdaQueryWrapper<Question>().eq(Question::getId, questionId));
+            correctAnswersVO.put(question.getTitle(), question.getAnswer());
+        });
+        Map<String,String> userAnswersVO = new HashMap<>();
+        records.forEach(item -> {
+            Question question = questionMapper.selectOne(new LambdaQueryWrapper<Question>().eq(Question::getId, item.getQuestionId()));
+            userAnswersVO.put(question.getTitle(), item.getAnswer());
+        });
         QuestionResultVO questionResultVO = QuestionResultVO.builder()
                 .questionSize(questionIds.size())
                 .correctCount(correctCount.get())
+                .correctAnswersVO(correctAnswersVO)
+                .userAnswersVO(userAnswersVO)
                 .build();
         return Result.success(questionResultVO);
     }

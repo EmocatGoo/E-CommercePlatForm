@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.yyblcc.ecommerceplatforms.annotation.Sensitive;
+import com.yyblcc.ecommerceplatforms.domain.Enum.SensitiveType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,10 +33,13 @@ public class User {
     //用户头像路径
     private String avatar;
     //用户邮箱
+    @Sensitive(type = SensitiveType.EMAIL)
     private String email;
     //用户手机号码
+    @Sensitive(type = SensitiveType.MOBILE_PHONE)
     private String phone;
     //用户身份证号码
+    @Sensitive(type = SensitiveType.ID_CARD)
     private String idNumber;
     //用户姓名
     private String name;

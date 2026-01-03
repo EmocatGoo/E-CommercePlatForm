@@ -110,8 +110,8 @@ public class UserController {
      * @return
      */
     @PutMapping("/password-update")
-    public Result<?> updatePassword(@RequestBody PasswordDTO passwordDTO,HttpServletRequest request) {
-        return userService.updatePassword(passwordDTO,request);
+    public Result<?> updatePassword(@RequestBody PasswordDTO passwordDTO) {
+        return userService.updatePassword(passwordDTO);
     }
 
     /**
@@ -198,9 +198,7 @@ public class UserController {
      */
     @GetMapping("/address")
     public Result<?> getAddressList() {
-//        Long userId = AuthContext.getUserId();
-        //TODO测试环境使用固定userId
-        Long userId = 4L;
+        Long userId = StpKit.USER.getLoginIdAsLong();
         log.info("获取用户{}的地址列表", userId);
         return userService.getUserAddressList(userId);
     }
@@ -216,5 +214,28 @@ public class UserController {
         return userService.setDefaultAddress(addressId);
     }
 
+    @GetMapping("/getDefaultAddress")
+    public Result getDefaultAddress(){
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        log.info("获取用户:{}的默认地址",userId);
+        return userService.getUserDefaultAddress(userId);
+    }
+
+    /**
+     * 更新用户头像
+     * @param avatar 头像 URL
+     * @return
+     */
+    @PutMapping("/updateAvatar")
+    public Result<?> updateAvatar(@RequestParam("avatar") String avatar) {
+        log.info("更新用户头像: avatar={}", avatar);
+        return userService.updateAvatar(avatar);
+    }
+
+    @GetMapping("/getUserCounts")
+    public Result<?> getUserCounts() {
+        log.info("获取用户数量");
+        return userService.getUserCounts();
+    }
 
 }

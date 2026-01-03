@@ -8,15 +8,15 @@ import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.ProductCommentAddDTO;
 import com.yyblcc.ecommerceplatforms.domain.DTO.ProductCommentLikeDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.RoleEnum;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductCommentVO;
 import com.yyblcc.ecommerceplatforms.domain.message.ProductCommentLikeMessage;
-import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
-import com.yyblcc.ecommerceplatforms.domain.po.ProductComment;
-import com.yyblcc.ecommerceplatforms.domain.po.ProductCommentLike;
-import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.CommentQuery;
 import com.yyblcc.ecommerceplatforms.mapper.ProductCommentLikeMapper;
 import com.yyblcc.ecommerceplatforms.mapper.ProductCommentMapper;
+import com.yyblcc.ecommerceplatforms.mapper.UserMapper;
 import com.yyblcc.ecommerceplatforms.service.ProductCommentService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.commentPath.PathUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +39,6 @@ import java.util.*;
 public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMapper, ProductComment> implements ProductCommentService {
     private final ProductCommentMapper productCommentMapper;
     private final StringRedisTemplate stringRedisTemplate;
-    private final HttpServletRequest request;
     private final ProductCommentLikeMapper productCommentLikeMapper;
     private final RocketMQTemplate rocketMQTemplate;
 
@@ -51,15 +50,12 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
         LIKE_SCRIPT.setResultType(Long.class);
     }
 
+    private final UserMapper userMapper;
+
     @Override
     @UpdateBloomFilter
     public Result createComment(ProductCommentAddDTO dto) {
-//        Long userId = (Long)request.getSession().getAttribute("USER_ID");
-//        if(userId == null){
-//           Long userId = AuthContext.getUserId();
-//        }
-        //TODO 测试环境
-        Long userId = 4L;
+        Long userId = StpKit.USER.getLoginIdAsLong();
         if (userId == null) {
             return Result.error("请先登录");
         }
@@ -139,19 +135,11 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
     //2.用Map分组
     //3.构造树结构
     public Result listComments(Long productId) {
-//        Long userId = (Long)request.getSession().getAttribute("USER_ID");
-//        if(userId == null){
-//           Long userId = AuthContext.getUserId();
-//        }
-        //TODO 测试环境
-        Long userId = 4L;
+        Long userId = StpKit.USER.getLoginIdAsLong();
         //1.查询所有
         List<ProductComment> commentList = productCommentMapper.selectList(new LambdaQueryWrapper<ProductComment>()
                 .eq(ProductComment::getProductId, productId)
                 .orderByAsc(ProductComment::getPath));
-        // 0001 id=1
-        // 0001.0002 id=2
-        // 0001.0003 id=3
 
         //2.用Map分组
         Map<Long,ProductComment> commentMap = new HashMap<>();
@@ -160,12 +148,6 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
         for (ProductComment comment : commentList) {
             commentMap.put(comment.getId(), comment);
         }
-        //id  Comment
-        //1   Comment1{id=1,product_id=1,rootId=null,userId=4,content=... path=0001}
-        //2   Comment2{id=2,product_id=1,rootId=1,userId=4,content=... path=0001.0002}
-        //3   Comment3{id=3,product_id=1,rootId=1,userId=4,content=... path=0001.0003}
-        //4   Comment4{id=4,product_id=1,rootId=null,userId=4,content=... path=0002}
-
         //3.构建树结构
         for (ProductComment comment : commentList) {
             if (comment.getRootId() == null || comment.getRootId() == 0) {
@@ -197,17 +179,14 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
                 parent.getChildren().add(comment);
             }
         }
-
-        return Result.success(rootCommentList);
+        List<ProductCommentVO> productCommentVOList = rootCommentList.stream().map(this::convertToVO).toList();
+        return Result.success(productCommentVOList);
     }
 
     @Override
     public Result likeComment(ProductCommentLikeDTO productCommentLikeDTO) {
         String key = "comment:like:" + productCommentLikeDTO.getCommentId();
-//        Long userId = (Long)request.getSession().getAttribute("USER_ID");
-//        Long userId = AuthContext.getUserId();
-        //TODO 测试环境
-        Long userId = 4L;
+        Long userId = StpKit.USER.getLoginIdAsLong();
         if (!userId.equals(productCommentLikeDTO.getUserId())) {
             return Result.error("请先登录");
         }
@@ -238,8 +217,7 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
 
     @Override
     public Result deleteComment(Long commentId) {
-//        Long userId = (Long) request.getSession().getAttribute("USER_ID");
-        Long userId = 4L;
+        Long userId = StpKit.USER.getLoginIdAsLong();
         ProductComment comment = productCommentMapper.selectOne(new LambdaQueryWrapper<ProductComment>()
                 .eq(ProductComment::getUserId, userId)
                 .eq(ProductComment::getId, commentId)
@@ -275,9 +253,45 @@ public class ProductCommentServiceImplement extends ServiceImpl<ProductCommentMa
             return null;
         }
         String parentPath = path.substring(0, path.lastIndexOf("."));
-        ProductComment parent = productCommentMapper.selectOne(new LambdaQueryWrapper<ProductComment>()
+        List<ProductComment> parents = productCommentMapper.selectList(new LambdaQueryWrapper<ProductComment>()
                 .eq(ProductComment::getPath, parentPath)
-                .select(ProductComment::getId));
-        return parent == null ? null : parent.getId();
+                .select(ProductComment::getId)
+                .orderByAsc(ProductComment::getId)
+                .last("LIMIT 1"));
+        return parents.isEmpty() ? null : parents.getFirst().getId();
+    }
+
+    private ProductCommentVO convertToVO(ProductComment comment) {
+        ProductCommentVO vo = new ProductCommentVO();
+        BeanUtils.copyProperties(comment, vo);
+        if (comment.getDepth().equals(1)){
+            if (comment.getChildren() == null){
+                User commentUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, comment.getUserId()));
+                comment.setChildren(new ArrayList<>());
+                vo.setAuthorNickname(commentUser.getNickname());
+                vo.setAuthorAvatar(commentUser.getAvatar());
+            }else{
+                List<ProductCommentVO> childrenVOList = comment.getChildren().stream().map(child -> {
+                    ProductCommentVO childVO = convertToVO(child);
+                    User commentUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, child.getUserId()));
+                    User replyToUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, comment.getUserId()));
+                    
+                    childVO.setReplyToUserId(replyToUser.getId());
+                    childVO.setReplyToUsername(replyToUser.getNickname());
+                    childVO.setAuthorNickname(commentUser.getNickname());
+                    childVO.setAuthorAvatar(commentUser.getAvatar());
+                    
+                    return childVO;
+                }).toList();
+                vo.setChildren(childrenVOList);
+                User commentUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, comment.getUserId()));
+                User replyToUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, comment.getUserId()));
+                vo.setAuthorNickname(commentUser.getNickname());
+                vo.setAuthorAvatar(commentUser.getAvatar());
+                vo.setReplyToUserId(replyToUser.getId());
+                vo.setReplyToUsername(replyToUser.getNickname());
+            }
+        }
+        return vo;
     }
 }

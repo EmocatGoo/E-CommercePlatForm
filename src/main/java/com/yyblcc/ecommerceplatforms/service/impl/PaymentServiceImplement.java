@@ -22,18 +22,20 @@ import com.yyblcc.ecommerceplatforms.config.AliPayConfig;
 import com.yyblcc.ecommerceplatforms.domain.Enum.OrderStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.Enum.PayStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.PaymentVO;
-import com.yyblcc.ecommerceplatforms.domain.po.Order;
-import com.yyblcc.ecommerceplatforms.domain.po.Payment;
-import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.po.*;
+import com.yyblcc.ecommerceplatforms.mapper.OrderItemMapper;
 import com.yyblcc.ecommerceplatforms.mapper.OrderMapper;
 import com.yyblcc.ecommerceplatforms.mapper.PaymentMapper;
+import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
 import com.yyblcc.ecommerceplatforms.service.PaymentService;
 import com.yyblcc.ecommerceplatforms.util.id.PaySnGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +60,9 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     private final PaySnGenerator paySnGenerator;
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
+    private final ProductMapper productMapper;
+    private final OrderItemMapper orderItemMapper;
+    private final RocketMQTemplate rocketMQTemplate;
 
     /**
      * 初始化支付宝配置
@@ -89,6 +94,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
         if (CollUtil.isEmpty(orderSn)) {
             return Result.error("订单号列表不能为空");
         }
+
         String lockKey = "lock:mergePayment:" + orderSn.hashCode();
         RLock lock = redissonClient.getLock(lockKey);
         if (!lock.tryLock(0, 30, TimeUnit.SECONDS)) {
@@ -116,12 +122,14 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             if (existPayment != null) {
                 String cacheKey = "order:payment:" + userId;
                 Map<Object, Object> map = stringRedisTemplate.opsForHash().entries(cacheKey);
-                String qrCode = map.get("qrCodeBase64").toString();
-                if (StringUtils.isNotBlank(qrCode)) {
-                    return Result.success(PaymentVO.builder()
-                            .paymentSn(existPayment.getMergePaySn())
-                            .qrCodeBase64(qrCode)
-                            .build());
+                if (!map.isEmpty()) {
+                    String qrCode = map.get("qrCodeBase64") != null ? map.get("qrCodeBase64").toString() : null;
+                    if (StringUtils.isNotBlank(qrCode)) {
+                        return Result.success(PaymentVO.builder()
+                                .paymentSn(existPayment.getMergePaySn())
+                                .qrCodeBase64(qrCode)
+                                .build());
+                    }
                 }
                 return regenerateQrCode(existPayment);
             }
@@ -144,7 +152,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                     .orderCount(orders.size())
                     .payStatus(PayStatusEnum.PENDING.getCode())
                     .createTime(LocalDateTime.now())
-                    .expireTime(LocalDateTime.now().plusMinutes(2))
+                    .expireTime(LocalDateTime.now().plusMinutes(15))
                     .build();
             paymentMapper.insert(payment);
 
@@ -157,9 +165,14 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             String cacheKey = "order:payment:" + userId;
             Map<String, String> cacheMap = Map.of("mergePaySn", mergePaySn, "qrCodeBase64", qrCodeBase64);
             stringRedisTemplate.opsForHash().putAll(cacheKey, cacheMap);
-            stringRedisTemplate.expire(cacheKey, Duration.ofMinutes(2));
+            stringRedisTemplate.expire(cacheKey, Duration.ofMinutes(15));
 
             log.info("创建支付成功，合并支付单号：{}, 订单数量：{}, 总金额：{}", mergePaySn, orders.size(), totalAmount);
+            //发送延时消息，检测是否支付，订单超时未支付则关闭
+            rocketMQTemplate.syncSend("payment-timeout-topic",
+                    MessageBuilder.withPayload(mergePaySn).build(),
+                    3000,
+                    16);
             return Result.success(PaymentVO.builder()
                     .qrCodeBase64(qrCodeBase64)
                     .paymentSn(mergePaySn)
@@ -266,9 +279,8 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                 return Result.success("支付成功");
             }
 
-            // 5. 判断是否已过期（修复你原来的超级大 Bug！）
+            // 5. 判断是否已过期
             if (LocalDateTime.now().isAfter(payment.getExpireTime())) {
-                // 过期 → 关闭支付单和订单
                 closePaymentAndOrders(payment, orders);
                 return Result.error("订单已过期");
             }
@@ -294,12 +306,22 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                 payment.setPayTime(LocalDateTime.now());
                 paymentMapper.updateById(payment);
 
-                // 批量更新订单（性能高 + 事务一致）
                 orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                         .in(Order::getOrderSn, orderSn)
                         .set(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
                         .set(Order::getOrderStatus, OrderStatusEnum.DISPATCH.getCode())
                 );
+                List<Long> productIdList;
+                productIdList = orderItemMapper.selectList(
+                        new LambdaQueryWrapper<OrderItem>().in(OrderItem::getOrderSn, orderSn))
+                        .stream()
+                        .map(OrderItem::getProductId)
+                        .toList();
+                for (Long productId : productIdList) {
+                    Product product = productMapper.selectById(productId);
+                    product.setSaleCount(product.getSaleCount() + 1);
+                    productMapper.updateById(product);
+                }
 
                 log.info("支付成功，支付宝交易号：{}，合并支付单：{}", aliResp.getTradeNo(), paySn);
 
@@ -413,10 +435,10 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
 
             orderMapper.update(null,new LambdaUpdateWrapper<Order>()
                     .in(Order::getOrderSn, orderSn)
-                    .set(Order::getPayStatus, PayStatusEnum.REFUND.getCode())
                     .set(Order::getOrderStatus, OrderStatusEnum.REFUND.getCode())
                     .set(Order::getCancelTime, LocalDateTime.now())
-                    .set(Order::getCancelReason,refundReason));
+                    .set(Order::getCancelReason,refundReason)
+                    .last("FOR UPDATE"));
 
             log.info("退款成功 paySn={} refundSn={} amount={} orders={}",
                     paySn, refundSn, refundAmount, orderSn);
@@ -474,18 +496,26 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                     AlipayTradeCloseResponse response = Factory.Payment.Common().close(paySn);
 
                     if (!ResponseChecker.success(response)) {
-                        log.error("支付宝关闭订单失败: {},code = {}",response.getMsg(),response.getCode());
-                        return Result.error("支付宝订单出现异常，取消失败");
+                        log.error("支付宝关闭订单失败: {},code = {},subcode = {},subMsg = {}",response.getMsg(),response.getCode(),response.getSubCode(),response.getSubMsg());
+                        // 处理支付宝返回的特定错误，如交易不存在或已关闭
+                        String subCode = response.getSubCode();
+                        if ("ACQ.TRADE_NOT_EXIST".equals(subCode) || "ACQ.TRADE_STATUS_ERROR".equals(subCode)) {
+                            log.info("支付宝订单不存在或已关闭，继续关闭系统内部订单");
+                            // 允许继续关闭系统内部订单
+                        } else {
+                            // 其他错误，返回失败
+                            return Result.error("支付宝订单出现异常，取消失败");
+                        }
+                    } else {
+                        log.info("支付宝关闭订单成功: {} ,code = {}",response.getMsg(),response.getCode());
                     }
-                    log.info("支付宝关闭订单成功: {} ,code = {}",response.getMsg(),response.getCode());
                 } catch (Exception e) {
                     log.error("支付宝接口异常 paySn={}",paySn, e);
-                    aliPayClosed = false;
+                    // 支付宝接口异常，继续关闭系统内部订单，避免因支付宝问题导致无法取消订单
+                    log.info("支付宝接口异常，继续关闭系统内部订单");
                 }
             }
-            if (!aliPayClosed) {
-                throw new RuntimeException("支付宝订单关闭失败，取消终止");
-            }
+            // 移除aliPayClosed检查，允许即使支付宝关闭失败也继续关闭系统内部订单
             payment.setPayStatus(PayStatusEnum.CANCEL.getCode());
             paymentMapper.updateById(payment);
 
@@ -495,6 +525,13 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                 order.setCancelTime(LocalDateTime.now());
                 order.setCancelReason("用户主动取消订单");
                 orderMapper.updateById(order);
+                List<OrderItem> orderItems = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
+                orderItems.forEach(orderItem -> {
+                   productMapper.update(null,
+                           new LambdaUpdateWrapper<Product>()
+                                   .eq(Product::getId,orderItem.getProductId())
+                                   .setSql("stock = stock + " + orderItem.getQuantity()));
+                });
             });
             log.info("订单取消成功 paySn={} orders={}",paySn,orders);
             return Result.success("取消成功");

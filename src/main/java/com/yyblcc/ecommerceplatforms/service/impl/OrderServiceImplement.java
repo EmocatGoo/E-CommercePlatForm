@@ -1,7 +1,6 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -14,15 +13,18 @@ import com.yyblcc.ecommerceplatforms.domain.VO.*;
 import com.yyblcc.ecommerceplatforms.domain.message.CartDeleteMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.OrderQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.RefundQuery;
 import com.yyblcc.ecommerceplatforms.exception.BusinessException;
 import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.service.*;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.id.OrderSnGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,21 +49,21 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     private final ProductMapper productMapper;
     private final OrderSnGenerator orderSnGenerator;
     private final RocketMQTemplate rocketMQTemplate;
-    private final PaymentMapper paymentMapper;
+    private final OrderCommentMapper orderCommentMapper;
     private static final String DELETE_CART_TOPIC = "cart-delete-topic";
     private static final String ORDER_REFUND_TOPIC = "order-refund-topic";
     private final OrderItemMapper orderItemMapper;
-    private final UserMapper userMapper;
     private final RefundMapper refundMapper;
 
 
     @Override
-    public Result<PageBean> pageList(OrderQuery orderQuery) {
+    public Result<PageBean<OrderAdminVO>> pageList(OrderQuery orderQuery) {
         Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()), new LambdaQueryWrapper<Order>()
                 .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
                 .like(orderQuery.getConsignee() != null, Order::getConsignee, orderQuery.getConsignee())
                 .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
-                .orderByAsc(Order::getCreateTime));
+                .between(orderQuery.getBeginTime() != null && orderQuery.getEndTime() != null, Order::getCreateTime, orderQuery.getBeginTime(), orderQuery.getEndTime())
+                .orderByDesc(Order::getCreateTime));
         
         List<OrderAdminVO> orderAdminVOList = orderPage.getRecords().stream()
                 .map(this::convertToOrderAdminVO)
@@ -72,15 +74,16 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     }
 
     @Override
-    public Result<PageBean> craftsmanPageList(OrderQuery orderQuery) {
-        //TODO记得删除
-//        Long craftsmanId = AuthContext.getUserId();
-        Long craftsmanId = 2L;
+    public Result<PageBean<OrderCraftsmanVO>> craftsmanPageList(OrderQuery orderQuery) {
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()),
                         new LambdaQueryWrapper<Order>()
                         .eq(Order::getCraftsmanId, craftsmanId)
                         .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
-                        .orderByAsc(Order::getCreateTime));
+                        .like(orderQuery.getConsignee() != null, Order::getConsignee, orderQuery.getConsignee())
+                        .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
+                        .between(orderQuery.getBeginTime() != null && orderQuery.getEndTime() != null, Order::getCreateTime, orderQuery.getBeginTime(), orderQuery.getEndTime())
+                        .orderByDesc(Order::getCreateTime));
         List<OrderCraftsmanVO> orderCraftsmanVOList = orderPage.getRecords().stream()
                 .map(this::convertToOrderCraftsmanVO)
                 .toList();
@@ -89,23 +92,19 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     }
 
     @Override
-    public Result<PageBean> pageUserOrders(OrderQuery orderQuery) {
-//        Long userId = AuthContext.getUserId();
-        Long userId = 4L;
-        List<Payment> paymentList = paymentMapper.selectList(new LambdaQueryWrapper<Payment>()
-                .eq(Payment::getUserId, userId)
-                .orderByAsc(Payment::getCreateTime)
-                .last("FOR UPDATE"));
-        List<String> paySnList = paymentList.stream().map(Payment::getMergePaySn).toList();
+    public Result<PageBean<OrderUserVO>> pageUserOrders(OrderQuery orderQuery) {
+        Long userId = StpKit.USER.getLoginIdAsLong();
         Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()),
-                new LambdaQueryWrapper<Order>()
-                        .eq(Order::getUserId, userId)
-                        .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
-                        .in(Order::getPaySn, paySnList)
-                        .orderByAsc(Order::getCreateTime));
+                        new LambdaQueryWrapper<Order>()
+                                .eq(Order::getUserId, userId)
+                                .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
+                                .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
+                                .between(orderQuery.getBeginTime() != null && orderQuery.getEndTime() != null, Order::getCreateTime, orderQuery.getBeginTime(), orderQuery.getEndTime())
+                                .orderByDesc(Order::getCreateTime));
         List<OrderUserVO> orderUserVOList = orderPage.getRecords().stream()
                 .map(this::convertToOrderUserVO)
                 .toList();
+        log.warn("查询到的订单个数为:{}",orderPage.getTotal());
         PageBean<OrderUserVO> pageBean = new PageBean<>(orderPage.getTotal(),orderUserVOList);
         return Result.success(pageBean);
     }
@@ -113,10 +112,8 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     @Override
     @Transactional(rollbackFor = Exception.class)
     @UpdateBloomFilter
-    public Result createOrder(OrderDTO orderDTO) {
-//        Long userId = AuthContext.getUserId();
-        //TODO 记得删除
-        Long userId = 4L;
+    public Result<CreateOrderVO> createOrder(OrderDTO orderDTO) {
+        Long userId = StpKit.USER.getLoginIdAsLong();
         String key = lockKey + userId;
         if (Boolean.FALSE.equals(stringRedisTemplate.opsForValue().setIfAbsent(key, "1", Duration.ofSeconds(10)))) {
             throw new RuntimeException("请勿重复提交订单!");
@@ -187,7 +184,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                     orderItemList.add(OrderItem.builder()
                             .productId(product.getId())
                             .productName(product.getProductName())
-                            .productImage(product.getImageUrl())
+                            .productImage(product.getImageUrl().getFirst())
                             .price(price)
                             .quantity(quantity)
                             .totalAmount(itemTotal)
@@ -281,7 +278,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result userUpdateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
+    public Result<?> userUpdateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
         String paySn = orderStatsuDTO.getPaySn();
         Long userId = AuthContext.getUserId();
 
@@ -319,7 +316,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     }
 
     @Override
-    public Result updateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
+    public Result<String> updateOrderStatus(OrderStatsuDTO orderStatsuDTO) {
         String paySn = orderStatsuDTO.getPaySn();
         Long craftsmanId = AuthContext.getUserId();
         String expressNo = orderStatsuDTO.getExpressNo();
@@ -351,16 +348,22 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             orderMapper.updateById(order);
         });
 
-        return Result.success();
+        return Result.success("订单状态更新成功");
     }
 
     @Override
-    public Result signUpRefund(UserSignUpRefundDTO userSignUpRefundDTO) {
+    @Transactional(rollbackFor = Exception.class)
+    public Result<String> signUpRefund(UserSignUpRefundDTO userSignUpRefundDTO) {
         //用户通过自己的订单记录选择退款项目，指定退款物，可以获得需退款商品的productId;会给前端返回paySn，通过paySn找到订单集合orders，通过orders再查找orderItem，具体是利用ordetItemMapper，指定eq为userId,productId,in（orders）。
         //orderItem下有refund实体需要的orderId,orderSn,userId,craftsmanId,productId,productName,productImage,quantity,totalAmount->refundAmount
         String paySn = userSignUpRefundDTO.getPaySn();
         Long userId = AuthContext.getUserId();
-        Long productId = userSignUpRefundDTO.getProductId();
+        List<Long> productIds = userSignUpRefundDTO.getProductIds();
+        
+        if (CollUtil.isEmpty(productIds)) {
+            throw new BusinessException("请选择需要退款的商品");
+        }
+        
         List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
                 .eq(Order::getPaySn, paySn)
                 .eq(Order::getUserId, userId)
@@ -370,6 +373,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         if (CollUtil.isEmpty(orders)) {
             throw new BusinessException("订单查询发生异常，退款失败");
         }
+        
         //退款情况，1、未发货 2、未收货（运输中）3、待评价（已收货）4、已评价 ，也就是均可发起退款申请，但是具体需要匠人审核
         List<String> orderSnList = orders.stream().map(Order::getOrderSn).toList();
 
@@ -377,31 +381,54 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             throw new BusinessException("未找到对应订单，退款失败");
         }
 
-        OrderItem orderItem = orderItemMapper.selectOne(new LambdaQueryWrapper<OrderItem>()
-                .eq(OrderItem::getProductId, productId)
+        // 查询所有选中的订单项
+        List<OrderItem> orderItems = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getUserId, userId)
-                .in(OrderItem::getOrderSn, orderSnList));
+                .in(OrderItem::getProductId, productIds)
+                .in(OrderItem::getOrderSn, orderSnList)
+                .last("FOR UPDATE"));
 
-        if (orderItem == null) {
+        if (CollUtil.isEmpty(orderItems)) {
             throw new BusinessException("未找到对应订单项，退款失败");
         }
+        
+        // 验证所有选中的商品都找到了对应的订单项
+        Set<Long> foundProductIds = orderItems.stream()
+                .map(OrderItem::getProductId)
+                .collect(Collectors.toSet());
+        
+        for (Long productId : productIds) {
+            if (!foundProductIds.contains(productId)) {
+                throw new BusinessException("商品ID " + productId + " 未找到对应订单项");
+            }
+        }
 
-        refundMapper.insert(Refund.builder()
-                .orderId(orderItem.getOrderId())
-                .orderSn(orderItem.getOrderSn())
-                .orderItemId(orderItem.getId())
-                .userId(orderItem.getUserId())
-                .craftsmanId(orderItem.getCraftsmanId())
-                .productId(orderItem.getProductId())
-                .productName(orderItem.getProductName())
-                .productImage(orderItem.getProductImage())
-                .quantity(orderItem.getQuantity())
-                .refundAmount(orderItem.getTotalAmount())
-                .applyReason(userSignUpRefundDTO.getRefundReason())
-                .applyDesc(userSignUpRefundDTO.getRefundDesc())
-                .refundType(userSignUpRefundDTO.getRefundType())
-                .refundStatus(RefundEnum.APPLY.getCode())
-                .build());
+        // 为每个订单项创建退款记录
+        for (OrderItem orderItem : orderItems) {
+            // 生成唯一的退款单号，格式：REFUND-支付号-时间戳-商品索引
+            String refundSn = "REFUND" + "-" + paySn + orderItem.getProductId();
+            
+            refundMapper.insert(Refund.builder()
+                    .refundSn(refundSn)
+                    .orderId(orderItem.getOrderId())
+                    .orderSn(orderItem.getOrderSn())
+                    .orderItemId(orderItem.getId())
+                    .userId(orderItem.getUserId())
+                    .craftsmanId(orderItem.getCraftsmanId())
+                    .productId(orderItem.getProductId())
+                    .productName(orderItem.getProductName())
+                    .productImage(orderItem.getProductImage())
+                    .quantity(orderItem.getQuantity())
+                    .refundAmount(orderItem.getTotalAmount())
+                    .applyReason(userSignUpRefundDTO.getRefundReason())
+                    .applyDesc(userSignUpRefundDTO.getRefundDesc())
+                    .applyImages(userSignUpRefundDTO.getRefundImage())
+                    .refundType(userSignUpRefundDTO.getRefundType())
+                    .refundStatus(RefundEnum.APPLY.getCode())
+                    .paySn(paySn)
+                    .build());
+        }
+        
         return Result.success("已申请退款，请等待商家审核");
     }
 
@@ -414,12 +441,13 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         }
 
         //查询退款申请是否存在
-        Refund refund = refundMapper.selectOne(new LambdaQueryWrapper<Refund>()
+        List<Refund> refunds = refundMapper.selectList(new LambdaQueryWrapper<Refund>()
                 .eq(Refund::getOrderSn, orderReviewDTO.getOrderSn())
                 .eq(Refund::getCraftsmanId, craftsmanId)
                 .eq(Refund::getRefundStatus, RefundEnum.APPLY.getCode())
                 .last("FOR UPDATE"));
-        if (refund == null) {
+
+        if (refunds == null) {
             throw new BusinessException("退款申请不存在");
         }
 
@@ -432,58 +460,173 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         if (status.equals(RefundEnum.AGREE.getCode())){
             if (order.getOrderStatus().equals(OrderStatusEnum.RECEIPT.getCode()) ||
                     order.getOrderStatus().equals(OrderStatusEnum.BEEVALUATED.getCode())) {
-                refund.setRefundStatus(RefundEnum.AGREE.getCode());
-                refund.setRefundType(RefundEnum.BACKGOODS.getCode());
-                refund.setAgreeTime(LocalDateTime.now());
+                refunds.forEach(refund -> {
+                    refund.setRefundStatus(RefundEnum.AGREE.getCode());
+                    refund.setRefundType(RefundEnum.BACKGOODS.getCode());
+                    refund.setAgreeTime(LocalDateTime.now());
+                    refundMapper.updateById(refund);
+
+                    orderItemMapper.update(new LambdaUpdateWrapper<OrderItem>()
+                            .eq(OrderItem::getOrderSn, orderReviewDTO.getOrderSn())
+                            .eq(OrderItem::getCraftsmanId, craftsmanId)
+                            .set(OrderItem::getRefundStatus, OrderStatusEnum.APPROVE.getCode())
+                            .set(OrderItem::getRefundAmount,order.getTotalAmount())
+                            .last("FOR UPDATE"));
+
+                });
+                return Result.success("同意退款，请等待用户退货");
+            }else{
+                refunds.forEach(refund -> {
+                    refund.setRefundStatus(RefundEnum.SUCCESS.getCode());
+                    refund.setRefundType(RefundEnum.RETURN.getCode());
+                    refund.setAgreeTime(LocalDateTime.now());
+                    refundMapper.updateById(refund);
+                    rocketMQTemplate.syncSend(ORDER_REFUND_TOPIC, refund);
+                });
+                return Result.success("退款处理中，预计1-7个工作日到账");
+            }
+        }else if (status.equals(RefundEnum.REFUSE.getCode())){
+            refunds.forEach(refund -> {
+                refund.setRefundStatus(RefundEnum.REFUSE.getCode());
+                refund.setRefuseReason(orderReviewDTO.getRejectReason());
                 refundMapper.updateById(refund);
 
                 orderItemMapper.update(new LambdaUpdateWrapper<OrderItem>()
                         .eq(OrderItem::getOrderSn, orderReviewDTO.getOrderSn())
                         .eq(OrderItem::getCraftsmanId, craftsmanId)
-                        .set(OrderItem::getRefundStatus, OrderStatusEnum.APPROVE.getCode())
-                        .set(OrderItem::getRefundAmount,order.getTotalAmount())
-                        .last("FOR UPDATE"));
-
-                return Result.success("同意退款，请等待用户退货");
-            }else{
-                refund.setRefundStatus(RefundEnum.SUCCESS.getCode());
-                refund.setRefundType(RefundEnum.RETURN.getCode());
-                refund.setAgreeTime(LocalDateTime.now());
-                refundMapper.updateById(refund);
-                rocketMQTemplate.syncSend(ORDER_REFUND_TOPIC, refund);
-                return Result.success("退款处理中，预计1-7个工作日到账");
-            }
-        }else if (status.equals(RefundEnum.REFUSE.getCode())){
-            refund.setRefundStatus(RefundEnum.REFUSE.getCode());
-            refund.setRefuseReason(orderReviewDTO.getRejectReason());
-            refundMapper.updateById(refund);
-
-            orderItemMapper.update(new LambdaUpdateWrapper<OrderItem>()
-                    .eq(OrderItem::getOrderSn, orderReviewDTO.getOrderSn())
-                    .eq(OrderItem::getCraftsmanId, craftsmanId)
-                    .set(OrderItem::getRefundStatus, OrderStatusEnum.REFUSE.getCode())
-                    .last("FOR UPDATE"));
-
+                        .set(OrderItem::getRefundStatus, OrderStatusEnum.REFUSE.getCode()));
+            });
             return Result.success("已拒绝退款");
         }
 
         return Result.error("操作失败");
     }
 
+    @Override
+    public Result<PageBean<RefundFVO>> refundList(RefundQuery refundQuery) {
+        boolean isCraftsmanQuery = refundQuery.getCraftsmanId() != null;
+        if (isCraftsmanQuery){
+            Page<Refund> refundPage = refundMapper.selectPage(new Page<>(refundQuery.getPage(), refundQuery.getPageSize()),
+                    new LambdaQueryWrapper<Refund>()
+                            .eq(Refund::getCraftsmanId, refundQuery.getCraftsmanId())
+                            .eq(refundQuery.getOrderStatus() != null,Refund::getRefundStatus, refundQuery.getOrderStatus())
+                            .between(refundQuery.getBeginTime() != null && refundQuery.getEndTime() != null, Refund::getCreateTime, refundQuery.getBeginTime(), refundQuery.getEndTime())
+                            .like(refundQuery.getOrderSn() != null, Refund::getOrderSn, refundQuery.getOrderSn())
+                            .orderByDesc(Refund::getCreateTime));
+            List<RefundVO> refundVOList = refundPage.getRecords().stream().map(this::convertToRefundVO).toList();
+            Map<String,List<RefundVO>> groupByPaySn = refundVOList.stream().collect(Collectors.groupingBy(RefundVO::getPaySn));
+            List<RefundFVO> refundFVOS = new ArrayList<>();
+            groupByPaySn.forEach((paySn, refundVOs) -> {
+                RefundFVO refundCfVO = RefundFVO
+                        .builder().paySn(paySn)
+                        .refundVOList(refundVOs)
+                        .build();
+                refundFVOS.add(refundCfVO);
+            });
+            PageBean<RefundFVO> pageBean = new PageBean<>((long) groupByPaySn.size(), refundFVOS);
+            return Result.success(pageBean);
+        }else {
+            Page<Refund> refundPage = refundMapper.selectPage(new Page<>(refundQuery.getPage(), refundQuery.getPageSize()),
+                    new LambdaQueryWrapper<Refund>()
+                            .eq(refundQuery.getOrderStatus() != null,Refund::getRefundStatus, refundQuery.getOrderStatus())
+                            .between(refundQuery.getBeginTime() != null && refundQuery.getEndTime() != null, Refund::getCreateTime, refundQuery.getBeginTime(), refundQuery.getEndTime())
+                            .like(refundQuery.getOrderSn() != null, Refund::getOrderSn, refundQuery.getOrderSn())
+                            .orderByDesc(Refund::getCreateTime));
+            List<RefundVO> refundVOList = refundPage.getRecords().stream().map(this::convertToRefundVO).toList();
+            Map<String,List<RefundVO>> groupByPaySn = refundVOList.stream().collect(Collectors.groupingBy(RefundVO::getPaySn));
+            List<RefundFVO> refundFVOS = new ArrayList<>();
+            groupByPaySn.forEach((paySn, refundVOs) -> {
+                RefundFVO refundCfVO = RefundFVO
+                        .builder().paySn(paySn)
+                        .refundVOList(refundVOs)
+                        .build();
+                refundFVOS.add(refundCfVO);
+            });
+            PageBean<RefundFVO> pageBean = new PageBean<>((long) groupByPaySn.size(), refundFVOS);
+            return Result.success(pageBean);
+        }
+    }
+
+    @Override
+    public Result<Long> countCraftsmanOrders() {
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        Long count = orderMapper.selectCount(new LambdaQueryWrapper<Order>().eq(Order::getCraftsmanId, craftsmanId));
+        return Result.success(count);
+    }
+
+    @Override
+    public Result<Long> getOrderCounts() {
+        Long count = orderMapper.selectCount(null);
+        return Result.success(count);
+    }
+
+
+    @Override
+    public Result<BigDecimal> getSalesAmount() {
+        List<Order> orders = orderMapper.selectList(null);
+        BigDecimal totalAmount = orders.stream()
+                .map(Order::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return Result.success(totalAmount);
+    }
+
+    @Override
+    public Result<List<OrderAdminVO>> getAllOrders() {
+        List<Order> orders = orderMapper.selectList(null);
+        List<OrderAdminVO> orderList = orders.stream().map(this::convertToOrderAdminVO).toList();
+        return Result.success(orderList);
+    }
+
+    @Override
+    public Result<String> comment(OrderCommentDTO orderDTO) {
+        OrderComment comment = new OrderComment();
+        BeanUtils.copyProperties(orderDTO, comment);
+        comment.setCreateTime(LocalDateTime.now()).setUpdateTime(LocalDateTime.now());
+        int row = orderCommentMapper.insert(comment);
+        if (row > 0){
+            Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderSn, orderDTO.getOrderSn()));
+            order.setOrderStatus(OrderStatusEnum.EVALUATED.getCode());
+            orderMapper.update(order, new LambdaUpdateWrapper<Order>().eq(Order::getOrderSn, orderDTO.getOrderSn()));
+            return Result.success("评论成功");
+        }
+        return Result.error("评论失败");
+    }
+
+    @Override
+    public Result<List<OrderUserVO>> myOrder() {
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        List<OrderUserVO> orders = list(new LambdaQueryWrapper<Order>()
+                .eq(Order::getUserId, userId)).stream().map(this::convertToOrderUserVO).toList();
+        if (!CollUtil.isEmpty(orders)){
+            return Result.success(orders);
+        }
+        return Result.success();
+    }
+
+
     private OrderUserVO convertToOrderUserVO(Order order) {
-        List<OrderItem> orderItems = orderItemService.list(new LambdaQueryWrapper<OrderItem>()
-                .eq(OrderItem::getOrderId, order.getId()));
-        List<OrderItemUserVO> itemVOList = orderItems.stream()
+        List<OrderItemUserVO> itemVOList = orderItemService.list(
+                new LambdaQueryWrapper<OrderItem>()
+                        .eq(OrderItem::getOrderId, order.getId()))
+                .stream()
                 .map(this::convertToOrderItemUserVO)
                 .toList();
-
         return OrderUserVO.builder()
+                .orderId(order.getId())
+                .paySn(order.getPaySn())
+                .expressNo(order.getExpressNo())
+                .expressCompany(order.getExpressCompany())
                 .orderStatus(order.getOrderStatus())
                 .totalAmount(order.getTotalAmount())
+                .shippingAddress(order.getShippingAddress())
+                .consignee(order.getConsignee())
+                .phone(order.getPhone())
                 .createTime(order.getCreateTime())
                 .payTime(order.getPayTime())
+                .paymentMethod(order.getPaymentMethod())
                 .expressCompany(order.getExpressCompany())
                 .expressNo(order.getExpressNo())
+                .orderSn(order.getOrderSn())
                 .items(itemVOList)
                 .build();
     }
@@ -541,6 +684,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         User orderUser = userService.query().eq("id",order.getUserId()).one();
         return OrderCraftsmanVO.builder()
                 .orderSn(order.getOrderSn())
+                .paySn(order.getPaySn())
                 .userNickname(orderUser.getNickname())
                 .craftsmanAmount(order.getCraftsmanAmount())
                 .totalAmount(order.getTotalAmount())
@@ -564,6 +708,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     private OrderItemUserVO convertToOrderItemUserVO(OrderItem orderItem) {
         return OrderItemUserVO.builder()
                 .productId(orderItem.getProductId())
+                .craftsmanId(orderItem.getCraftsmanId())
                 .productName(orderItem.getProductName())
                 .productImage(orderItem.getProductImage())
                 .quantity(orderItem.getQuantity())
@@ -606,6 +751,14 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .craftsmanAmount(orderItem.getCraftsmanAmount())
                 .refundStatus(orderItem.getRefundStatus())
                 .build();
+    }
+
+    private RefundVO convertToRefundVO(Refund refund) {
+        RefundVO refundVO = new RefundVO();
+        BeanUtils.copyProperties(refund, refundVO);
+        Craftsman craftsman = craftsmanService.query().eq("id", refund.getCraftsmanId()).one();
+        refundVO.setCraftsmanName(craftsman.getName());
+        return refundVO;
     }
 
 

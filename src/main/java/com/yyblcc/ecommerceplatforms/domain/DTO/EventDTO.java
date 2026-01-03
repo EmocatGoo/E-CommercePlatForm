@@ -23,7 +23,6 @@ public class EventDTO {
 
     private String description;
 
-    @NotBlank(message = "活动类型不能为空")
     // 0线上活动 1线下活动
     private Integer eventType;
 

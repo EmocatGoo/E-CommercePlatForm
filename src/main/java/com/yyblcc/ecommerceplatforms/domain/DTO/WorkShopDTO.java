@@ -33,6 +33,6 @@ public class WorkShopDTO {
     @NotBlank
     private String techniqueIntro;
 
-    private List<VideoVO> shorVideos;
+    private List<VideoVO> shortVideos;
 
 }

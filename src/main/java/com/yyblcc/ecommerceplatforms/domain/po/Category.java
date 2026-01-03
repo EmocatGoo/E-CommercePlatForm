@@ -24,7 +24,6 @@ public class Category {
     //分类名称
     @NotBlank
     private String categoryName;
-    @NotBlank
     //分类标签
     private Integer tag;
     //分类描述

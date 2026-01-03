@@ -1,5 +1,7 @@
 package com.yyblcc.ecommerceplatforms.domain.VO;
 
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,7 +23,8 @@ public class CraftsmanAuthVO {
     private String handleCard;
     private String idCardFront;
     private String idCardBack;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> proofImages;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> masterpieceImages;
-
 }

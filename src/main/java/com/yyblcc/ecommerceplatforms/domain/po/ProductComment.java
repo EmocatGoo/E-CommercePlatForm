@@ -1,6 +1,7 @@
 package com.yyblcc.ecommerceplatforms.domain.po;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,7 +14,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@TableName("tb_product_comment")
+@TableName(value = "tb_product_comment",autoResultMap = true)
 public class ProductComment {
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -26,6 +27,7 @@ public class ProductComment {
     //评论内容
     private String content;
     //评论图片列表
+    @TableField(typeHandler = JacksonTypeHandler.class, value = "image_url")
     private List<String> imageUrl;
     //点赞数量
     private Integer likeCount;
@@ -35,7 +37,6 @@ public class ProductComment {
     private String path;
     //层级差
     private Integer depth;
-
 
     private LocalDateTime createTime;
     @TableLogic

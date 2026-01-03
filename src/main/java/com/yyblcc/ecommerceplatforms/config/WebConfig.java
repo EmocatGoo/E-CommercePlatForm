@@ -22,13 +22,20 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         // 登录相关
                         "/admin/login", "/craftsman/login", "/user/login",
-                        "/user/register", "/craftsman/apply","/user/logout",
-                        "/craftsman/logout","/category/*",
+                        "/user/register", "/craftsman/apply", "/user/logout",
+                        "/craftsman/save",
+                        "/craftsman/logout", "/admin/logout","/craftsman/check",
+                        "/craftsman/check-email","/user/check", "/user/check-email",
+                        "/email/**",
 
-                        // 首页 & 商品 & 文章 & 活动
+                        // 用户相关
+                        "/product/by-craftsman","/product/recommend",
+                        "/product/list", "/product/detail/**",
+                        "/by-craftsman/**",
+
+                        // 首页 & 静态资源
                         "/", "/home", "/index.html",
-                        "/goods/**", "/article/**", "/activity/**",
-                        "/common",
+                        "/common/**",
 
                         // 静态资源
                         "/static/**", "/css/**", "/js/**", "/images/**",

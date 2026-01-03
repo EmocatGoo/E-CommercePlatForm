@@ -1,10 +1,12 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.AddCartDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.CartItemToggle;
 import com.yyblcc.ecommerceplatforms.domain.DTO.ToggleCheckDTO;
 import com.yyblcc.ecommerceplatforms.domain.VO.CartVO;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.service.CartService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,8 +30,7 @@ public class CartController {
      */
     @PostMapping
     public Result<?> add(@RequestBody @Validated AddCartDTO dto) {
-        // 从 token 取
-        Long userId = AuthContext.getUserId();
+        Long userId = StpKit .USER.getLoginIdAsLong();
         cartService.addItem(userId, dto);
         return Result.success("加入成功");
     }
@@ -39,8 +40,9 @@ public class CartController {
      */
     @PutMapping("/check")
     public Result<?> toggleCheck(@RequestBody AddCartDTO dto) {
-        Long userId = AuthContext.getUserId();
-        cartService.toggleCheck(userId, dto.getProductId(), dto.getIsChecked());
+        Long userId = StpKit .USER.getLoginIdAsLong();
+        log.info("传入数据为：{}",dto);
+        cartService.toggleCheck(userId, dto.getProductId(), dto.getChecked());
         return Result.success();
     }
 
@@ -49,7 +51,7 @@ public class CartController {
      */
     @GetMapping("/list")
     public Result<CartVO> list() {
-        Long userId = AuthContext.getUserId();
+        Long userId = StpKit .USER.getLoginIdAsLong();
         return Result.success(cartService.getMyCart(userId));
     }
 
@@ -59,9 +61,15 @@ public class CartController {
         return cartService.batchdelete(productIds);
     }
 
-    @DeleteMapping()
+    @DeleteMapping
     public Result<?> delete(@RequestParam("productId")Long productId) {
         log.info("删除的商品id为：{}",productId);
         return cartService.delete(productId);
     }
+
+    @PostMapping("/toggleQuantity")
+     public void toggleQuantity(@RequestBody CartItemToggle dto) {
+        cartService.toggleQuantity(dto);
+    }
+
 }

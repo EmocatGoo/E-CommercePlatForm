@@ -1,17 +1,21 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderReviewDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.OrderStatsuDTO;
-import com.yyblcc.ecommerceplatforms.domain.DTO.UserSignUpRefundDTO;
+import com.yyblcc.ecommerceplatforms.domain.DTO.*;
+import com.yyblcc.ecommerceplatforms.domain.VO.OrderAdminVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.OrderCraftsmanVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.OrderUserVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.RefundFVO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.OrderQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.RefundQuery;
 import com.yyblcc.ecommerceplatforms.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/order")
@@ -27,7 +31,7 @@ public class OrderController {
      * @return
      */
     @GetMapping("/admin-page")
-    public Result<PageBean> pageList(@Validated OrderQuery orderQuery){
+    public Result<PageBean<OrderAdminVO>> pageList(@Validated OrderQuery orderQuery){
         log.info("订单查询:{}",orderQuery);
         return orderService.pageList(orderQuery);
     }
@@ -38,9 +42,14 @@ public class OrderController {
      * @return
      */
     @GetMapping("/craftsman-page")
-    public Result<PageBean> craftsmanPageList(@Validated OrderQuery orderQuery){
+    public Result<PageBean<OrderCraftsmanVO>> craftsmanPageList(@Validated OrderQuery orderQuery){
         log.info("匠人查询订单:{}",orderQuery);
         return orderService.craftsmanPageList(orderQuery);
+    }
+    @GetMapping("/craftsman-orders")
+    public Result<PageBean<OrderCraftsmanVO>> getOrdersCount(){
+        log.info("查询匠人所有订单数量");
+        return orderService.countCraftsmanOrders();
     }
 
     /**
@@ -49,7 +58,7 @@ public class OrderController {
      * @return
      */
     @GetMapping("/page")
-    public Result<PageBean> page(@Validated OrderQuery orderQuery){
+    public Result<PageBean<OrderUserVO>> page(@Validated OrderQuery orderQuery){
         log.info("用户查询订单：{}",orderQuery);
         return orderService.pageUserOrders(orderQuery);
     }
@@ -95,4 +104,41 @@ public class OrderController {
         log.info("匠人审核用户退款:{}",orderReviewDTO);
         return orderService.reviewOrder(orderReviewDTO);
     }
+
+    @GetMapping("/refund-page")
+    public Result<PageBean<RefundFVO>> refundPageList(@Validated RefundQuery refundQuery){
+        log.info("退款订单:{}",refundQuery);
+        return orderService.refundList(refundQuery);
+    }
+
+    @GetMapping("/myOrders")
+    public Result<List<OrderUserVO>> myOrders(){
+        log.info("用户查询订单");
+        return orderService.myOrder();
+    }
+
+    @GetMapping("/getOrderCounts")
+    public Result getOrderCounts(){
+        log.info("查询所有订单数量");
+        return orderService.getOrderCounts();
+    }
+
+    @GetMapping("/getSalesAmount")
+    public Result getSalesAmount(){
+        log.info("查询所有订单销售额");
+        return orderService.getSalesAmount();
+    }
+
+    @GetMapping("/getAllOrders")
+    public Result getAllOrders(){
+        log.info("查询所有订单");
+        return orderService.getAllOrders();
+    }
+
+    @PostMapping("/comment")
+    public Result comment(@RequestBody @Validated OrderCommentDTO dto){
+        log.info("用户评价订单:{}",dto);
+        return orderService.comment(dto);
+    }
+
 }

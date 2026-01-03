@@ -7,11 +7,12 @@ import com.yyblcc.ecommerceplatforms.domain.po.Question;
 import com.yyblcc.ecommerceplatforms.domain.po.QuestionRecord;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.QuestionQuery;
 
 import java.util.List;
 
 public interface QuestionService extends IService<Question> {
-    Result listQuestion(PageQuery query);
+    Result listQuestion(QuestionQuery query);
 
     Result createQuestion(QuestionDTO questionDTO);
 
