@@ -14,6 +14,7 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\co
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\config\RocketMQConfig.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\config\SMTPConfig.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\config\WebConfig.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\config\WebSocketConfig.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\constant\PasswordConstant.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\constant\StatusConstant.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\constant\UsernamePrifixConstant.java
@@ -21,6 +22,7 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\co
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\ArticleController.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\CartController.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\CategoryController.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\ChatController.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\CommonController.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\CraftsmanController.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\controller\EmailController.java
@@ -40,6 +42,7 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\do
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CartItemRedis.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CartItemToggle.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CategoryDTO.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\ChatSendDTO.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CraftsmanAuthDTO.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CraftsmanDTO.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\DTO\CraftsmanReviewDTO.java
@@ -86,14 +89,13 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\do
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\CartItem.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\Category.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\ChatMessage.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\ChatMessageRead.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\ChatSession.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\Craftsman.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\CraftsmanAuth.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\Event.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\EventApply.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\EventComment.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\Notification.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\NotificationSetting.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\OptionItem.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\Order.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\OrderComment.java
@@ -112,7 +114,6 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\do
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserArticleFavorite.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserArticleLike.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserCollect.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserNotification.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserProductFavorite.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\UserProductLike.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\domain\po\WorkShop.java
@@ -177,6 +178,7 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\ma
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\CartMapper.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\CategoryMapper.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\ChatMessageMapper.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\ChatMessageReadMapper.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\ChatSessionMapper.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\CraftsmanAuthMapper.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\mapper\CraftsmanMapper.java
@@ -206,7 +208,6 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\se
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\CartService.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\CategoryService.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\ChatMessageService.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\ChatSessionService.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\CraftsmanAuthService.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\CraftsmanService.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\EmailService.java
@@ -217,7 +218,6 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\se
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\CartServiceImplement.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\CategoryServiceImplement.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\ChatMessageServiceImplement.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\ChatSessionServiceImplement.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\CraftsmanAuthServiceImplement.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\CraftsmanServiceImplement.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\service\impl\EventCommentServiceImplement.java
@@ -253,4 +253,5 @@ E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\ut
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\util\redis\AccountLockCheck.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\util\redis\CacheClient.java
 E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\util\StpKit.java
-E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\websocket\WebSocketServer.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\websocket\ChatWebSocket.java
+E:\develop\Vue3\new-project\Emall\src\main\java\com\yyblcc\ecommerceplatforms\websocket\WsSessionManager.java

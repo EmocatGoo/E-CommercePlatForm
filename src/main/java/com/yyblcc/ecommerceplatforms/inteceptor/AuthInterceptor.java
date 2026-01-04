@@ -137,7 +137,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             return "GET".equals(method);
         }
         // 匠人上传接口（头像、封面）
-        if (uri.startsWith("/oss/")) {
+        if (uri.startsWith("/oss/") || uri.startsWith("/ws/") || uri.startsWith("/chat/")) {
             return true;
         }
         return uri.startsWith("/craftsman/") ||
@@ -158,7 +158,12 @@ public class AuthInterceptor implements HandlerInterceptor {
             return "GET".equals(method) || "POST".equals(method);
         }
         // 用户上传接口（头像）
-        if (uri.startsWith("/oss/upload/") || uri.startsWith("/cart/") || uri.startsWith("/cart") || uri.startsWith("/event/apply")) {
+        if (uri.startsWith("/oss/upload/") ||
+                uri.startsWith("/cart/") ||
+                uri.startsWith("/cart") ||
+                uri.startsWith("/event/apply") ||
+                uri.startsWith("/ws/") ||
+                uri.startsWith("/chat/")) {
             return true;
         }
         return uri.startsWith("/user/") ||

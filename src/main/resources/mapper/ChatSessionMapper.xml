@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.yyblcc.ecommerceplatforms.mapper.ChatSessionMapper">
+    <select id="getSessionsByUserId" resultType="com.yyblcc.ecommerceplatforms.domain.po.ChatSession">
+        select * from tb_chat_session where user_id = #{userId}
+    </select>
+
+    <select id="getSessionsByCraftsmanId" resultType="com.yyblcc.ecommerceplatforms.domain.po.ChatSession">
+        select * from tb_chat_session where craftsman_id = #{craftsmanId}
+    </select>
+
+    <select id="getSessionByUserIdAndCraftsmanId" resultType="com.yyblcc.ecommerceplatforms.domain.po.ChatSession">
+        select * from tb_chat_session where user_id = #{userId} and craftsman_id = #{craftsmanId}
+    </select>
+
+    <select id="countUnreadByUserId" resultType="java.lang.Long">
+        select sum(user_unread_count) from tb_chat_session where user_id = #{userId}
+    </select>
+
+    <select id="countUnreadByCraftsmanId" resultType="java.lang.Long">
+        select sum(craftsman_unread_count) from tb_chat_session where craftsman_id = #{craftsmanId}
+    </select>
+
+</mapper>
