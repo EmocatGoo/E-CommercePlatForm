@@ -3,11 +3,14 @@ package com.yyblcc.ecommerceplatforms.controller;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CraftsmanAuthDTO;
+import com.yyblcc.ecommerceplatforms.domain.VO.CraftsmanVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,14 +67,13 @@ public class CraftsmanController {
 
     /**
      * 修改匠人认证状态
-     * @param reviewStatus
-     * @param id
+     * @param dto
      * @return
      */
     @PutMapping("/review-status")
-    public Result<?> setReviewStatus(@RequestParam("reviewStatus")Integer reviewStatus, @RequestParam("id")Long id) {
-        log.info("status={},id={}", reviewStatus, id);
-        return craftsmanService.updateCraftsmanReviewStatus(reviewStatus,id);
+    public Result<?> setReviewStatus(@RequestBody CraftsmanReviewDTO dto) {
+        log.info("管理员审核材料:{}", dto);
+        return craftsmanService.updateCraftsmanReviewStatus(dto);
     }
 
     /**
@@ -132,6 +134,14 @@ public class CraftsmanController {
         return craftsmanService.login(loginDTO,request);
     }
 
+    @PostMapping("/logout")
+    public Result logout(){
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        log.info("craftsman {} 登出", craftsmanId);
+        StpKit.CRAFTSMAN.logout(craftsmanId);
+        return Result.success("已退出登录");
+    }
+
     @PutMapping("/resetPassword")
     public Result resetPassword(@RequestParam("craftsmanId") Long craftsmanId){
         log.info("craftsmanId={}", craftsmanId);
@@ -145,7 +155,7 @@ public class CraftsmanController {
     }
 
     @PostMapping("/signup-auth")
-    public Result signUpAuth(@RequestBody @Validated CraftsmanAuthDTO craftsmanAuthDTO){
+    public Result signUpAuth(@RequestBody CraftsmanAuthDTO craftsmanAuthDTO){
         log.info("craftsmanAuth={}", craftsmanAuthDTO);
         return craftsmanService.signUpAuth(craftsmanAuthDTO);
     }
@@ -154,5 +164,26 @@ public class CraftsmanController {
     public Result pageReview(@RequestParam Integer page, @RequestParam Integer pageSize){
         log.info("page={},pageSize={}", page, pageSize);
         return craftsmanAuthService.pageReview(page,pageSize);
+    }
+
+    /**
+     * 更新匠人头像
+     * @param avatar 头像 URL
+     * @return
+     */
+    @PutMapping("/updateAvatar")
+    public Result<?> updateAvatar(@RequestParam("avatar") String avatar) {
+        log.info("更新匠人头像: avatar={}", avatar);
+        return craftsmanService.updateAvatar(avatar);
+    }
+
+    @GetMapping("/front-page")
+    public Result<PageBean<CraftsmanVO>> frontPage(CraftsmanQuery query) {
+        return craftsmanService.frontPage(query);
+    }
+
+    @GetMapping("/selectReferenceProduct")
+    public Result<List<ProductListVO>> selectReferenceProduct(Long craftsmanId) {
+        return craftsmanService.selectReferenceProduct(craftsmanId);
     }
 }

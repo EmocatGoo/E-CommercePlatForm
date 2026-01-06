@@ -1,8 +1,12 @@
 package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
+import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
+import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
@@ -41,26 +45,22 @@ public class WorkShopController {
 
     /**
      * 分页查询工作室，管理员端分页展示
-     * @param page
-     * @param pageSize
+     * @param query
      * @return
      */
     @GetMapping("/page")
-    public Result page(@RequestParam(defaultValue = "1")Integer page, @RequestParam(defaultValue = "5")Integer pageSize){
-        log.info("page={},pageSize={}", page, pageSize);
-        return workShopService.pageWorkShop(page,pageSize);
+    public Result page(PageQuery query){
+        log.info("分页查询query:{}",query);
+        return workShopService.pageWorkShop(query);
     }
 
     /**
      * 通过匠人id获取工作室，匠人登陆后可查看自己的工作室
-//     * @param craftsmanId
      * @return
      */
     @GetMapping("/get-workshop")
     public Result getWorkShopByCraftsmanId(){
-//        log.info("id={}", craftsmanId);
-//        Long craftsmanId = AuthContext.getUserId();
-        Long craftsmanId = 2L;
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         return workShopService.getWorkShopByCraftsmanId(craftsmanId);
     }
 
@@ -94,20 +94,18 @@ public class WorkShopController {
     @PostMapping("/sign-up")
     public Result signUpWorkShop(@RequestBody @Validated WorkShopDTO workShopDTO){
         log.info("workShop={}", workShopDTO);
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 测试环境下使用固定ID,记得修改
-        Long craftsmanId = 2L;
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         return workShopService.signUpWorkShop(craftsmanId,workShopDTO);
     }
 
     @PutMapping("/update")
-    public Result  updateWorkShop(@RequestBody @Validated WorkShopDTO workShopDTO){
+    public Result  updateWorkShop(@RequestBody WorkShopDTO workShopDTO){
         log.info("workShop={}", workShopDTO);
         return workShopService.updateWorkShop(workShopDTO);
     }
 
-    @PostMapping("/visit/{id}")
-    public Result visitWorkShop(@PathVariable("id") Long id){
+    @PostMapping("/visit")
+    public Result visitWorkShop(@RequestParam Long id){
         log.info("id={}", id);
         return workShopService.visitWorkShop(id);
     }
@@ -119,12 +117,34 @@ public class WorkShopController {
     }
 
 
+    @GetMapping("/getShopStatus")
+    public Result getShopStatus(){
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        return workShopService.getWorkShopStatus(craftsmanId);
+    }
+
     @PutMapping("/set-workshopStatus")
     public Result working(@RequestParam Integer status){
-//        Long craftsmanId = AuthContext.getUserId();
-        //TODO 测试环境下使用固定ID,记得修改
-        Long craftsmanId = 2L;
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         return workShopService.setWorkShopStatus(craftsmanId,status);
+    }
+
+    @PostMapping("/view")
+    public void viewWorkShop(@RequestParam Long id){
+        log.info("id={}", id);
+        workShopService.viewWorkShop(id);
+    }
+
+    @GetMapping("/front-page")
+    public Result<PageBean<WorkShopVO>> frontPage(PageQuery query){
+        log.info("用户分页查询工作室");
+        return workShopService.frontPage(query);
+    }
+
+    @GetMapping("/checkCollect")
+    public Result<Boolean> checkCollect(@RequestParam Long workShopId){
+        log.info("id={}", workShopId);
+        return workShopService.checkCollect(workShopId);
     }
 
 }

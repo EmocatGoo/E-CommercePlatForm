@@ -1,7 +1,9 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -13,14 +15,18 @@ import com.yyblcc.ecommerceplatforms.domain.DTO.LoginDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.RoleEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.AdminVO;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import com.yyblcc.ecommerceplatforms.mapper.AdminMapper;
 import com.yyblcc.ecommerceplatforms.mapper.CraftsmanMapper;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.AdminService;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
+import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,22 +43,17 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> implements AdminService {
-
-    @Autowired
-    private AdminMapper adminMapper;
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private final AdminMapper adminMapper;
+    private final StringRedisTemplate stringRedisTemplate;
     private static final Long TTL = 10L;
     private static final String LOCK_KEY_PRIFIX = "login:lock:admin:";
     private static final String FAIL_KEY_PRIFIX = "login:fail:admin:";
     private static final Long LOCK_TTL = 60L;
-    @Autowired
-    private WorkShopService workShopService;
-    @Autowired
-    private WorkShopMapper workShopMapper;
-    @Autowired
-    private CraftsmanMapper craftsmanMapper;
+    private final WorkShopService workShopService;
+    private final WorkShopMapper workShopMapper;
+    private final CraftsmanMapper craftsmanMapper;
 
     /**
      * 添加管理员
@@ -115,7 +116,7 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
         adminMapper.update(admin);
         try {
             Set<String> keys = stringRedisTemplate.keys("admin:page:*");
-            keys.forEach(key -> {stringRedisTemplate.delete(key);});
+            keys.forEach(stringRedisTemplate::delete);
         }catch (Exception e){
             log.error(e.getMessage());
             return Result.error("未找到相关key");
@@ -130,20 +131,20 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
      */
     @Override
     public Result<?> updateAdmin(AdminDTO adminDTO) {
-        String username = UsernamePrifixConstant.ADMIN_USERNAME_PRIFIX + adminDTO.getUsername();
-        if ("".equals(username)){
-            return Result.error("账号为空！更新失败！");
-        }
-        String name = adminDTO.getName();
-        Admin admin = query().eq("username", username).one();
+        Long adminId = AuthContext.getUserId();
+        String username = adminDTO.getUsername();
+        Admin admin = query().eq("id", adminId).one();
         if (admin == null) {
             return Result.error("未找到用户！");
         }
-        admin.setName(name);
-        adminMapper.update(admin);
+        adminMapper.update(new LambdaUpdateWrapper<Admin>()
+                .eq(Admin::getId, adminId)
+                .eq(Admin::getUsername, username)
+                .set(Admin::getName, adminDTO.getName())
+                .last("FOR UPDATE"));
         try {
             Set<String> keys = stringRedisTemplate.keys("admin:page:*");
-            keys.forEach(key -> {stringRedisTemplate.delete(key);});
+            keys.forEach(stringRedisTemplate::delete);
         }catch (Exception e){
             log.error(e.getMessage());
             return Result.error("未找到相关key");
@@ -165,7 +166,7 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
         adminMapper.deleteById(id);
         try {
             Set<String> keys = stringRedisTemplate.keys("admin:page:*");
-            keys.forEach(key -> {stringRedisTemplate.delete(key);});
+            keys.forEach(stringRedisTemplate::delete);
         }catch (Exception e){
             log.error(e.getMessage());
             return Result.error("未找到相关key");
@@ -224,33 +225,47 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
 
     /**
      * 分页查询管理员信息
-     * @param page
-     * @param pageSize
+     * @param query
      * @return
      */
     @Override
-    public Result<PageBean> page(Integer page, Integer pageSize){
-        String key = "admin:page:" + page + ":" +pageSize;
-        try{
-            String jsonStr = stringRedisTemplate.opsForValue().get(key);
-            if (jsonStr != null){
-                return Result.success(JSON.parseObject(jsonStr, PageBean.class));
+    public Result<PageBean> pageAdmins(PageQuery query){
+        boolean isCondition = query.getKeyword() != null && !query.getKeyword().isEmpty();
+        String key = "admin:page:" + query.getPage() + ":" + query.getPageSize();
+        if (!isCondition){
+            try{
+                String jsonStr = stringRedisTemplate.opsForValue().get(key);
+                if (jsonStr != null){
+                    return Result.success(JSON.parseObject(jsonStr, PageBean.class));
+                }
+            }catch (Exception e){
+                log.error(e.getMessage(),e);
+                return Result.error(e.getMessage());
             }
-        }catch (Exception e){
-            log.error(e.getMessage(),e);
-            return Result.error(e.getMessage());
         }
-
-        Page<Admin> adminPage = new Page<>(page, pageSize);
-        Page<Admin> pageList = adminMapper.selectPage(adminPage, null);
-
+        String reverseKeyword;
+        if (query.getKeyword() != null){
+            reverseKeyword = new StringBuilder(query.getKeyword()).reverse().toString();
+        }else{
+            reverseKeyword = "";
+        }
+        Page<Admin> pageList = adminMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()),
+                new LambdaQueryWrapper<Admin>()
+                        .like(query.getKeyword() != null , Admin::getName, query.getKeyword())
+                        .or()
+                        .like(Admin::getName, reverseKeyword)
+                        .orderByDesc(Admin::getCreateTime));
         List<AdminVO> adminVOs = pageList.getRecords().stream().map(this::convertToVO).toList();
 
         PageBean pageBean = new PageBean(pageList.getTotal(), adminVOs);
 
-        stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),TTL, TimeUnit.MINUTES);
+        if (!isCondition){
+            stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),TTL, TimeUnit.MINUTES);
+        }
+
         return Result.success(pageBean);
     }
+
 
     @Override
     public Result login(LoginDTO loginDTO, HttpServletRequest request) {
@@ -287,10 +302,17 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
             return tryLock(username);
         }
 
-        AdminVO adminVO = convertToVO(admin);
         // 5. 登录成功 清除失败记录
         clearFailCount(username);
         setSession(request, admin);
+        
+        // 6. 获取 token 并返回给前端
+        String token = com.yyblcc.ecommerceplatforms.util.StpKit.ADMIN.getTokenValue();
+        
+        // 7. 构建返回数据，包含用户信息和 token
+        AdminVO adminVO = convertToVO(admin);
+        adminVO.setToken(token);
+        
         return Result.success(adminVO);
     }
 
@@ -305,7 +327,7 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
         adminMapper.update(admin);
         try {
             Set<String> keys = stringRedisTemplate.keys("admin:page:*");
-            keys.forEach(key -> {stringRedisTemplate.delete(key);});
+            keys.forEach(stringRedisTemplate::delete);
         }catch (Exception e){
             log.error(e.getMessage());
             return Result.error("未找到相关key");
@@ -324,6 +346,7 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
         return Result.success(pageBean);
     }
 
+    //TODO 待完善
     @Override
     public Result pageReview(Integer page, Integer pageSize) {
         Page<Craftsman> craftsmanPage = new Page<>(page, pageSize);
@@ -378,15 +401,52 @@ public class AdminServiceImplement extends ServiceImpl<AdminMapper, Admin> imple
     }
 
     /**
-     * 设置 Session
+     * 设置 Session 并返回 token
      */
     private void setSession(HttpServletRequest request, Admin admin) {
-        HttpSession session = request.getSession(true);
-        session.setAttribute("USER", admin);
-        session.setAttribute("ROLE", admin.getRole());
-        session.setAttribute("USER_ID", admin.getId());
-        session.setMaxInactiveInterval(30 * 60);
+        // 使用StpKit.ADMIN进行登录，实现管理员会话隔离
+        StpKit.ADMIN.login(admin.getId());
+        // 将用户信息和角色存储到对应的Session中
+        StpKit.ADMIN.getSession().set("USER", admin);
+        StpKit.ADMIN.getSession().set("ROLE", admin.getRole());
+        StpKit.ADMIN.getSession().set("USER_ID", admin.getId());
+        
+        // 获取 token 并记录日志
+        String token = StpKit.ADMIN.getTokenValue();
+        log.info("管理员登录成功，token: {}", token);
     }
 
+    /**
+     * 更新管理员头像
+     * @param avatar 头像 URL
+     * @return
+     */
+    @Override
+    public Result<?> updateAvatar(String avatar) {
+        try {
+            // 从 SaToken 获取当前登录的管理员 ID
+            Long adminId = StpKit.ADMIN.getLoginIdAsLong();
+            
+            // 查询管理员
+            Admin admin = query().eq("id", adminId).one();
+            if (admin == null) {
+                return Result.error("管理员不存在");
+            }
+            
+            // 更新头像
+            admin.setAvatar(avatar);
+            if (updateById(admin)) {
+                log.info("管理员 {} 更新头像成功: {}", adminId, avatar);
+                Admin dbAdmin = query().eq("id", adminId).one();
+                AdminVO adminVO = convertToVO(dbAdmin);
+                return Result.success(adminVO);
+            }
+            
+            return Result.error("头像更新失败");
+        } catch (Exception e) {
+            log.error("更新管理员头像失败", e);
+            return Result.error("头像更新失败：" + e.getMessage());
+        }
+    }
 
 }

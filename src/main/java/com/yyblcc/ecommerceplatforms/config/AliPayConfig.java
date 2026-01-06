@@ -1,0 +1,27 @@
+package com.yyblcc.ecommerceplatforms.config;
+
+import lombok.Data;
+import org.springframework.context.annotation.Configuration;
+
+@Data
+@Configuration
+public class AliPayConfig {
+    //appid
+    private final String APP_ID = "9021000153674261";
+    //应用私钥
+    private final String APP_PRIVATE_KEY = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCSAdQj1ocU07T9D6+6cVuAnjTUFTJI1tZdGLQoUwoOfjzX9NezCH95pw6RxnHu6GDdrkogG7QVJ700jXG05TxzQMkaexlZvT8KGK2I3nEAo77bkxL8UcRTYoHUxAhYGrZdUjw0EOx38kzMrss71b16h7MnP8vFAUIvQltujzPv5weTyyfgUCnBS4JZhuATVnjpvSsZvpZeNcWeqZRZUbz3ojSM3yADlEgqQB05z2nVD4zh8gQxknLB+Wl4wa9wSaPI4Kl1h4fxP0r9wOQhoa5Iq0tnlCB7bY31LYmypRLjXfw9OuyQrIzDYPPagPRLEoX6KZcL8VfZ0BIlNEyvx189AgMBAAECggEBAIItDTYSrAcepixGExg4vytSYqmAaH/Ww/Lm9qFJQBsh5B9rFfFyry0IjA3ej3BBUTP0k/RCnvGJp8C2J13wUFA1v9dTT4vaFd1rmTUBlmDKnXzpiTDbuh3aIwVO7l2XG2bizfhh6mMa7exEH8EuVSxs1oc08vmnoJnAIQLWvKizyvdiZyET6xjoMRaMJ2cVEjzdHzH737QgUOn1TkwEXWG3Aib6l9ycgz+P+vc+ZvGklkRmHaiV8eAdQ+OdcMXwrP+4LmvTHQVedKvQFM92IG19enlCcXeSuI/Nowk9uVTUFmd/kvdcjleb/i/Ol9fy/WvAD339+HwVdDqYEIa4aiECgYEAx9KbdeYnBfo7C2pOxy2m1q17bVDGhpnlUWCySN4Cjv9klWIQxJO3jvdswFETrcjOzXQT2cNGxjVMBo/pmpCL2vhIeXndxE6hHgTmlNIoddWLeaoHMU4pdkQ2zwOGmBODWjdxIWPlekGZ0MpbvirOGyaxiMH1QKIikAqbZUMX/qUCgYEAuw4TTFW01+0Pvv+Hh38AP0AaGYO26NtqnCCsDgUxUdfIZeHyfor8G1ndpvJW+5szmZ6BsxL6r1KU3DV/KaOub+5TI3dBZkKdOGtIcU1U1Jgg7Yt+ydk/Bvl8SrsaUKc7174leS4sRphAjPi4SEQwkrNoy38wPQt66Y7MrTHJ0rkCgYAxkIv/Mpd7ZBZBPp1LyocXuPBkrSSRPpsjFFkkuezoi3DnnOuL1xgw3i6bhYDcGnMxgxlpaoajo5S4C/pl3HTUW8GeYBwiFV7hk1WelIJ0uANgqkwebsTaERGHR9ia4Dw0pIvrPFwvdxYwNAGNqhB1q6NdyL6MyarJD9h7xaiuAQKBgQCtCnlZzZONiPVfGJ50/0zoNlGutsV3prt6EVN5aN5WOwtdDOe6nrJYTwsYjOlguxPCEfskAPO9SuUAzdCEYbJWQ5/PmFv80LUG42BRyFsojE8x0TEKY5nFxvhvXaUbZYmbrICYGNnGuMRGZTR9Te+tVqEkV9X1MvCSrZK0yfFNqQKBgFdf8d4xEx/9edB0IGVomwglfa3Tk5KuQiw4wlEel4ehKzIwvIV+QE52kysf7EospgRMfo4/3BpH1nhBxBNjW9nTx/enaecsglHCFD30Y1ILGgP/4QJalGpROKnpOj6MYe9CfY3huftjHSZgryLXOXyHUl2oT/nPRYzL3PbnunpA";
+    private final String CHARSET = "UTF-8";
+    //支付宝公钥
+    private final String ALIPAY_PUBLIC_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArR73Aw/5nogqIG83XQtEssrCHEFRY5iK2ovsSnU7qbKYb9NnuWfcIg8OSYTut9QhpVZa/0yHrAqY5QtiCk1NRYDJzuqoHAPj+iH6uhYyDsEgkf9tXTTrmqwaf85JzhwHuvdAmycER1VZLaVm/3ybo5whtUkCMT25l3ENWPH59XvFO2hmVmRKpzxO+X5eQe0rOdL/Oadmvb0Imhlf89gR48xKq2PUjaTOGpR0hAklTN++nStvp5IhOjb1lF1AgrJ3qj5qdMpsEz3fH5LLEzn9xFCZFCeihs0FAkz303SOd3KXv8GmQH2FqQfv86+41J2dE2PhyDrhj3cR09e8220KnwIDAQAB";
+    //沙箱接口路径
+    private final String GATEWAY_HOST = "openapi-sandbox.dl.alipaydev.com";
+    private final String GATEWAY_PATH = "/gateway.do";
+    private final String FORMAT = "JSON";
+    //签名方式
+    private final String SIGN_TYPE = "RSA2";
+    //支付宝异步通知路径
+    private final String NOTIFY_URL = "http://zc964c65.natappfree.cc";
+    //支付宝同步通知路径
+    private final String RETURN_URL = "http://zc964c65.natappfree.cc";
+
+}

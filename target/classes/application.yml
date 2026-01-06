@@ -1,10 +1,11 @@
 spring:
   application:
     name: e-commerceplatforms
+
 #MySQL配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/e-commerceplatform?serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/e-commerceplatform?serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&allowMultiQueries=true&useUnicode=true&characterEncoding=utf8
     username: root
     password: "031003"
 #允许循环依赖
@@ -13,15 +14,15 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 100MB
+      max-request-size: 500MB
       resolve-lazily: true
-#SpringMail配置
+  #SpringMail配置
   mail:
     host: smtp.qq.com          # QQ SMTP 服务器
     port: 587                  # STARTTLS 端口（或 465 SSL）
     username: 3165069523@qq.com
-    password: isgselvqtkuudebi # 你的授权码（16 位）
+    password: zthphngyxeuqddac # 你的授权码（16 位）
     properties:
       mail:
         smtp:
@@ -56,16 +57,44 @@ mybatis-plus:
       logic-delete-value: 1          # 逻辑已删除值
       logic-not-delete-value: 0
       type-enums-package: com.yyblcc.ecommerceplatforms.entity.Enum
+      type-handlers-package: com.baomidou.mybatisplus.extension.handlers
   configuration:
+    call-setters-on-nulls: true
     map-underscore-to-camel-case: true
-#设置session有效期为30min
-server:
-  servlet:
-    session:
-      timeout: 30m
+#Sa-Token配置
+sa-token:
+  token-name: Authorization
+  timeout: 86400  # 1天，单位秒
+  activit-timeout: -1  # -1表示永不过期
+  is-concurrent: false  # 同一账号是否允许多处登录
+  is-share: true  # 同一token是否在多人登录时共享
+  token-style: uuid  # token风格
+  is-log: true  # 是否打印操作日志
+#  port: 2112
 #SpringMail附属配置
 app:
   verify-code:
     length: 6
     expire-seconds: 300                 # 5 分钟
     send-limit-seconds: 60
+#RocketMQ相关配置
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: my-producer-group
+  consumer:
+    group: my-consumer-group
+#RustFS云存储
+rustfs:
+  endpoint: http://127.0.0.1:9000
+  access-key: rustfsadmin
+  secret-key: rustfsadmin
+  bucket-name: emall-bucket
+server:
+
+#MinIO
+#minio:
+#  endpoint: http://127.0.0.1:9000
+#  access-key: administrator
+#  secret-key: administrator
+#  bucket-name: emall-bucket

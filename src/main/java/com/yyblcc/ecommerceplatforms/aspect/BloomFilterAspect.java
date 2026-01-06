@@ -1,10 +1,7 @@
 package com.yyblcc.ecommerceplatforms.aspect;
 
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
-import com.yyblcc.ecommerceplatforms.domain.po.Admin;
-import com.yyblcc.ecommerceplatforms.domain.po.Craftsman;
-import com.yyblcc.ecommerceplatforms.domain.po.User;
-import com.yyblcc.ecommerceplatforms.domain.po.WorkShop;
+import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.service.BloomFilterService;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
@@ -30,7 +27,9 @@ public class BloomFilterAspect {
 
     // 需要添加到布隆过滤器的实体类型
     private static final Set<Class<?>> BLOOM_FILTER_ENTITIES = Set.of(
-            User.class, Admin.class, Craftsman.class, WorkShop.class
+            User.class, Admin.class, Craftsman.class, WorkShop.class,
+            UserCollect.class,Product.class,Order.class,OrderItem.class,
+            UserAddress.class, Event.class,ProductComment.class
     );
 
     /**

@@ -2,15 +2,18 @@ package com.yyblcc.ecommerceplatforms.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.WorkShopDTO;
+import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
+import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.po.WorkShop;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 
 public interface WorkShopService extends IService<WorkShop> {
     Result reviewWorkshop(Long workshopId, Integer status);
 
     Result banWorkshop(Long workshopId);
 
-    Result pageWorkShop(Integer page, Integer pageSize);
+    Result pageWorkShop(PageQuery query);
 
     Result getWorkShopByCraftsmanId(Long craftsmanId);
 
@@ -28,4 +31,11 @@ public interface WorkShopService extends IService<WorkShop> {
 
     Result collectWorkShop(Long workShopId);
 
+    Result getWorkShopStatus(Long craftsmanId);
+
+    void viewWorkShop(Long id);
+
+    Result<PageBean<WorkShopVO>> frontPage(PageQuery query);
+
+    Result<Boolean> checkCollect(Long workShopId);
 }

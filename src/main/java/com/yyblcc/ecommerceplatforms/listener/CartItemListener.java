@@ -1,5 +1,6 @@
 package com.yyblcc.ecommerceplatforms.listener;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.yyblcc.ecommerceplatforms.domain.message.AddCartMessage;
@@ -24,20 +25,21 @@ public class CartItemListener implements RocketMQListener<AddCartMessage> {
 
     @Override
     public void onMessage(AddCartMessage msg) {
-        Cart cart = cartMapper.selectOne(Wrappers.<Cart>lambdaQuery().eq(Cart::getUserId, msg.getUserId()));
+        Cart cart = cartMapper.selectOne(new LambdaQueryWrapper<Cart>().eq(Cart::getUserId, msg.getUserId()));
         if (cart == null) {
             cart = Cart.builder().userId(msg.getUserId()).itemCount(0).checkedCount(0).build();
             cartMapper.insert(cart);
         }
 
-        CartItem exist = cartItemMapper.selectOne(Wrappers.<CartItem>lambdaQuery()
+        CartItem exist = cartItemMapper.selectOne(new LambdaQueryWrapper<CartItem>()
                 .eq(CartItem::getUserId, msg.getUserId())
                 .eq(CartItem::getProductId, msg.getProductId()));
 
         if (exist != null) {
-            cartItemMapper.update(new LambdaUpdateWrapper<CartItem>().eq(CartItem::getId, exist.getId())
+            cartItemMapper.update(new LambdaUpdateWrapper<CartItem>()
+                    .eq(CartItem::getId, exist.getId())
                     .setSql("quantity = quantity + " + msg.getQuantity())
-                    .set(msg.isChecked(), CartItem::getIsChecked, 1));
+                    .set(msg.isChecked(), CartItem::getChecked, 1));
         } else {
             CartItem newItem = CartItem.builder()
                     .cartId(cart.getId())
@@ -48,7 +50,7 @@ public class CartItemListener implements RocketMQListener<AddCartMessage> {
                     .productImage(msg.getProductImage())
                     .price(msg.getPriceAtAdd())
                     .quantity(msg.getQuantity())
-                    .isChecked(msg.isChecked() ? 1 : 0)
+                    .checked(msg.isChecked() ? 1 : 0)
                     .build();
             cartItemMapper.insert(newItem);
         }
@@ -56,7 +58,8 @@ public class CartItemListener implements RocketMQListener<AddCartMessage> {
         cartMapper.update(new LambdaUpdateWrapper<Cart>()
                 .eq(Cart::getUserId, msg.getUserId())
                 .setSql("item_count = item_count + " + msg.getQuantity())
-                .set(msg.isChecked(), Cart::getCheckedCount,
-                        Wrappers.<Cart>lambdaUpdate().setSql("checked_count = checked_count + " + msg.getQuantity())));
+
+                .set(msg.isChecked(), Cart::getCheckedCount, 
+                        cart.getCheckedCount() + (msg.isChecked() ? msg.getQuantity() : 0)));
     }
 }

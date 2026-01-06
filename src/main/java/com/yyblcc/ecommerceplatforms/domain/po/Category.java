@@ -24,6 +24,8 @@ public class Category {
     //分类名称
     @NotBlank
     private String categoryName;
+    //分类标签
+    private Integer tag;
     //分类描述
     private String description;
     //分类创建时间

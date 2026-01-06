@@ -22,6 +22,11 @@ public class BloomFilterService {
     private final WorkShopMapper workShopMapper;
     private final UserAddressMapper userAddressMapper;
     private final UserCollectMapper userCollectMapper;
+    private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
+    private final ProductMapper productMapper;
+    private final PaymentMapper paymentMapper;
+    private final EventMapper eventMapper;
 
 
     /**
@@ -59,6 +64,26 @@ public class BloomFilterService {
             List<UserCollect> userCollectList = userCollectMapper.selectList(null);
             userCollectList.forEach(userCollect -> cacheClient.addToBloomFilter(userCollect.getId()));
             log.info("已添加 {} 个收藏ID到布隆过滤器", userCollectList.size());
+
+            List<Order> orderList = orderMapper.selectList(null);
+            orderList.forEach(order -> cacheClient.addToBloomFilter(order.getId()));
+            log.info("已添加 {} 个订单ID到布隆过滤器", orderList.size());
+
+            List<Product> productList = productMapper.selectList(null);
+            productList.forEach(product -> cacheClient.addToBloomFilter(product.getId()));
+            log.info("已添加 {} 个商品ID到布隆过滤器", productList.size());
+
+            List<OrderItem> orderItemList = orderItemMapper.selectList(null);
+            orderItemList.forEach(orderItem -> cacheClient.addToBloomFilter(orderItem.getId()));
+            log.info("已添加 {} 个订单项ID到布隆过滤器", orderItemList.size());
+
+            List<Payment> paymentList = paymentMapper.selectList(null);
+            paymentList.forEach(payment -> cacheClient.addToBloomFilter(payment.getId()));
+            log.info("已添加 {} 个支付ID到布隆过滤器",paymentList.size());
+
+            List<Event> eventList = eventMapper.selectList(null);
+            eventList.forEach(event -> cacheClient.addToBloomFilter(event.getId()));
+            log.info("已添加 {} 个活动ID到布隆过滤器",eventList.size());
 
             log.info("布隆过滤器初始化完成");
         } catch (Exception e) {

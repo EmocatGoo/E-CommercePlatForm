@@ -1,5 +1,4 @@
 package com.yyblcc.ecommerceplatforms.domain.VO;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,6 +16,7 @@ public class UserVO {
     private String nickname;
     private String phone;
     private String email;
+    private String idNumber;
     private Long defaultAddressId;
     private Integer sex;
     private String avatar;

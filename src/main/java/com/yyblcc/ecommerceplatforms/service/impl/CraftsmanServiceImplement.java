@@ -1,7 +1,9 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -12,16 +14,18 @@ import com.yyblcc.ecommerceplatforms.constant.UsernamePrifixConstant;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.Enum.RoleEnum;
 import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
-import com.yyblcc.ecommerceplatforms.domain.VO.CraftsmanVO;
-import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.*;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
+import com.yyblcc.ecommerceplatforms.mapper.CraftsmanAuthMapper;
 import com.yyblcc.ecommerceplatforms.mapper.CraftsmanMapper;
+import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
 import com.yyblcc.ecommerceplatforms.service.WorkShopService;
+import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.redis.AccountLockCheck;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,6 +46,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import static java.util.stream.Collectors.toList;
+
 /**
  * @author YuYiBlackcat
  */
@@ -49,17 +55,14 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @RequiredArgsConstructor
 public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craftsman> implements CraftsmanService {
-
     private final CraftsmanMapper craftsmanMapper;
-
     private final StringRedisTemplate stringRedisTemplate;
-
     private final AccountLockCheck accountLockCheck;
     private static final Long TTL = 10L;
-    private final WorkShopService workShopService;
-    private final WorkShopServiceImplement workShopServiceImplement;
-    private final WorkShopMapper workShopMapper;
     private final CraftsmanAuthService craftsmanAuthService;
+    private final CraftsmanAuthMapper craftsmanAuthMapper;
+    private final WorkShopMapper workShopMapper;
+    private final ProductMapper productMapper;
 
     /**
      * 匠人注册
@@ -70,28 +73,34 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     @UpdateBloomFilter
     public Result<?> saveCraftsman(CraftsmanDTO craftsmanDTO) {
         if ("".equals(craftsmanDTO.getUsername())){
-            return Result.error("账号为空!");
+            return Result.error("账号为空");
         }
         String username = UsernamePrifixConstant.CRAFTSMAN_USERNAME_PRIFIX + craftsmanDTO.getUsername();
         Craftsman existing = query().eq("username", username).one();
-        // TODO 考虑是否添加随机数解决账号相同问题
         if (existing != null) {
-            return Result.error("此账号已存在!");
+            return Result.error("此账号已存在");
         }
-        Craftsman craftsman =Craftsman.builder()
+        Craftsman craftsman = new Craftsman();
+        craftsman
                 //设置账号固定前缀
-                .username(username)
+                .setUsername(username)
+                //设置匠人名称
+                .setName(craftsmanDTO.getName())
                 //设置账号为待审核
-                .status(StatusConstant.WAITING_REVIEW)
+                .setStatus(StatusConstant.WAITING_REVIEW)
                 //设置密码
-                .password(DigestUtils.md5DigestAsHex(craftsmanDTO.getPassword().getBytes(StandardCharsets.UTF_8)))
+                .setPassword(DigestUtils.md5DigestAsHex(craftsmanDTO.getPassword().getBytes(StandardCharsets.UTF_8)))
+                //设置手机号
+                .setPhone(craftsmanDTO.getPhone())
+                //设置邮箱
+                .setEmail(craftsmanDTO.getEmail())
                 //设置注册时间
-                .createTime(LocalDateTime.now())
+                .setCreateTime(LocalDateTime.now())
                 //设置最后操作时间
-                .updateTime(LocalDateTime.now())
-                .build();
+                .setUpdateTime(LocalDateTime.now());
         save(craftsman);
-        return Result.success("注册成功!");
+        stringRedisTemplate.keys("craftsman:page:*").forEach(stringRedisTemplate::delete);
+        return Result.success("注册成功");
     }
 
     /**
@@ -104,16 +113,15 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     public Result<?> updateCraftsmanStatus(Integer status,Long id) {
         Craftsman exist = query().eq("id", id).one();
         if (exist == null) {
-            return Result.error("未找到用户!");
+            return Result.error("未找到用户");
         }
-        Craftsman craftsman = Craftsman.builder()
-                .id(id)
-                .status(status)
-                .build();
-        craftsmanMapper.update(craftsman);
+        Craftsman craftsman = new Craftsman()
+                .setId(id)
+                .setStatus(status);
+        craftsmanMapper.updateById(craftsman);
         Set<String> keys = stringRedisTemplate.keys("craftsman:*");
-        keys.forEach(key -> {stringRedisTemplate.delete(key);});
-        return Result.success("设置成功!");
+        keys.forEach(stringRedisTemplate::delete);
+        return Result.success("设置成功");
     }
 
     /**
@@ -125,18 +133,17 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
      */
     @Override
     public Result<?> updateCraftsman(CraftsmanDTO craftsmanDTO, HttpServletRequest request) {
-        //TODO 记得替换为getAttribute or 启动拦截器获取上下文
-        Long craftsmanId = AuthContext.getUserId();
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
         Craftsman craftsman = query().eq("id", craftsmanId).one();
         if (craftsman == null) {
-            return Result.error("未找到用户！");
+            return Result.error("未找到用户");
         }
         BeanUtils.copyProperties(craftsmanDTO,craftsman);
         craftsman.setUpdateTime(LocalDateTime.now());
-        craftsmanMapper.update(craftsman);
+        craftsmanMapper.updateById(craftsman);
         Set<String> keys = stringRedisTemplate.keys("craftsman:*");
-        keys.forEach(key -> {stringRedisTemplate.delete(key);});
-        return Result.success("更新成功!");
+        keys.forEach(stringRedisTemplate::delete);
+        return Result.success("更新成功");
     }
 
     /**
@@ -148,10 +155,10 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     public Result<?> remove(Long id) {
         Craftsman craftsman = query().eq("id", id).one();
         if (craftsman == null) {
-            return Result.error("未找到用户！");
+            return Result.error("未找到用户");
         }
         craftsmanMapper.deleteById(id);
-        return Result.success("删除成功！");
+        return Result.success("删除成功");
     }
 
     /**
@@ -177,7 +184,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         }
 
         craftsmanMapper.deleteBatchIds(ids);
-        return Result.success("批量删除成功!");
+        return Result.success("批量删除成功");
     }
 
     /**
@@ -203,25 +210,31 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
      */
     @Override
     public Result<PageBean> page(CraftsmanQuery craftsmanQuery){
+        boolean isCondition = craftsmanQuery.getName() != null;
         String key = "craftsman:page:" + craftsmanQuery.getPage() + ":" +craftsmanQuery.getPageSize();
-        try{
-            String jsonStr = stringRedisTemplate.opsForValue().get(key);
-            if (jsonStr != null){
-                return Result.success(JSON.parseObject(jsonStr, PageBean.class));
+        if (!isCondition){
+            try{
+                String jsonStr = stringRedisTemplate.opsForValue().get(key);
+                if (jsonStr != null){
+                    return Result.success(JSON.parseObject(jsonStr, PageBean.class));
+                }
+            }catch (Exception e){
+                log.error(e.getMessage(),e);
+                return Result.error(e.getMessage());
             }
-        }catch (Exception e){
-            log.error(e.getMessage(),e);
-            return Result.error(e.getMessage());
         }
 
-        Page<Craftsman> craftsmanPage = new Page<>(craftsmanQuery.getPage(), craftsmanQuery.getPageSize());
-        Page<Craftsman> pageList = craftsmanMapper.selectPage(craftsmanPage, null);
+        Page<Craftsman> pageList = craftsmanMapper.selectPage(new Page<>(craftsmanQuery.getPage(), craftsmanQuery.getPageSize()),
+                new LambdaQueryWrapper<Craftsman>()
+                        .like(craftsmanQuery.getName() != null, Craftsman::getName,craftsmanQuery.getName())
+                        .orderByAsc(Craftsman::getCreateTime));
 
         List<CraftsmanVO> craftsmanVOList = pageList.getRecords().stream().map(this::convertToVO).toList();
 
         PageBean<CraftsmanVO> pageBean = new PageBean<>(pageList.getTotal(), craftsmanVOList);
-
-        stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),TTL, TimeUnit.MINUTES);
+        if (!isCondition){
+            stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),TTL, TimeUnit.MINUTES);
+        }
         return Result.success(pageBean);
     }
 
@@ -230,7 +243,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     @Override
     public Result<?> getProfile(Long craftsmanId) {
         if (craftsmanId == null){
-            return Result.error("出现查询异常!");
+            return Result.error("出现查询异常");
         }
         String key = "craftsman:profile:" + craftsmanId;
         try{
@@ -245,7 +258,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         Craftsman craftsman = query().eq("id", craftsmanId).one();
         if (craftsman == null){
             stringRedisTemplate.opsForValue().set(key,"null", Duration.ofMinutes(10));
-            return Result.error("未找到匠人信息!");
+            return Result.error("未找到匠人信息");
         }
         CraftsmanVO craftsmanVO = convertToVO(craftsman);
         return Result.success(craftsmanVO);
@@ -253,14 +266,15 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
 
     @Override
     public Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request) {
-        Long craftsmanId = Long.valueOf(request.getHeader("USER_ID"));
-        if (!Objects.equals(RoleEnum.CRAFTSMAN.toString(), request.getHeader("ROLE"))){
-            return Result.error("未找到匠人信息!");
+        Long craftsmanId = StpUtil.getLoginIdAsLong();
+        RoleEnum role = (RoleEnum) StpUtil.getSession().get("ROLE");
+        if (!Objects.equals(RoleEnum.CRAFTSMAN, role)){
+            return Result.error("未找到匠人信息");
         }
         try{
             String craftsmanStr = stringRedisTemplate.opsForValue().get("craftsman:profile:" + craftsmanId);
             if ("null".equals(craftsmanStr)){
-                return Result.error("未找到匠人信息!");
+                return Result.error("未找到匠人信息");
             }
         }catch (Exception e){
             log.error(e.getMessage(),e);
@@ -269,46 +283,88 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         String oldPassword = passwordDTO.getOldPassword();
         String newPassword = passwordDTO.getNewPassword();
         if (StringUtils.isBlank(oldPassword) || StringUtils.isBlank(newPassword)){
-            return Result.error("密码不能为空!");
+            return Result.error("密码不能为空");
         }
         Craftsman craftsman = query().eq("id", craftsmanId).one();
         if (craftsman == null){
             stringRedisTemplate.opsForValue().set("craftsman:profile:" + craftsmanId,"null",Duration.ofMinutes(10));
-            return Result.error("未找到匠人信息!");
+            return Result.error("未找到匠人信息");
         }
         craftsman.setPassword(DigestUtils.md5DigestAsHex(newPassword.getBytes(StandardCharsets.UTF_8)));
-        craftsmanMapper.update(craftsman);
+        craftsmanMapper.updateById(craftsman);
         Set<String> keys = stringRedisTemplate.keys("craftsman:*");
-        keys.forEach(key -> {stringRedisTemplate.delete(key);});
-        return Result.success("密码修改成功!");
+        keys.forEach(stringRedisTemplate::delete);
+        return Result.success("密码修改成功");
     }
 
     @Override
-    public Result<?> updateCraftsmanReviewStatus(Integer reviewStatus, Long id) {
-        Craftsman exist = query().eq("id", id).one();
+    public Result<?> updateCraftsmanReviewStatus(CraftsmanReviewDTO dto) {
+        Craftsman exist = query().eq("id", dto.getCraftsmanId()).one();
         if (exist == null) {
-            return Result.error("未找到用户!");
+            return Result.error("未找到匠人信息");
         }
-        Craftsman craftsman = Craftsman.builder()
-                .id(id)
-                .reviewStatus(reviewStatus)
-                .build();
-        craftsmanMapper.update(craftsman);
-        Set<String> keys = stringRedisTemplate.keys("craftsman:*");
-        keys.forEach(key -> {stringRedisTemplate.delete(key);});
-        return Result.success("设置成功!");
+        if (!exist.getReviewStatus().equals(0)){
+            return Result.error("该用户已被审核");
+        }
+        if (dto.getStatus().equals(1)){
+
+            CraftsmanAuth auth = craftsmanAuthMapper.selectOne(new LambdaQueryWrapper<CraftsmanAuth>()
+                    .eq(CraftsmanAuth::getCraftsmanId, dto.getCraftsmanId()));
+            if (auth == null){
+                return Result.error("查询异常");
+            }
+            auth.setStatus(dto.getStatus());
+            Craftsman craftsman = copyCraftsmanProperty(dto, exist, auth);
+            craftsmanMapper.updateById(craftsman);
+            int row = craftsmanAuthMapper.update(new LambdaUpdateWrapper<CraftsmanAuth>()
+                    .eq(CraftsmanAuth::getId, dto.getAuthId())
+                    .eq(CraftsmanAuth::getCraftsmanId, dto.getCraftsmanId())
+                    .set(CraftsmanAuth::getStatus, dto.getStatus()));
+            return row > 0 ?Result.success("审核完成") : Result.error("审核失败");
+        } else if (dto.getStatus().equals(2)){
+            CraftsmanAuth auth = craftsmanAuthMapper.selectOne(new LambdaQueryWrapper<CraftsmanAuth>()
+                    .eq(CraftsmanAuth::getCraftsmanId, dto.getCraftsmanId()));
+            if (auth == null){
+                return Result.error("查询异常");
+            }
+            auth.setStatus(dto.getStatus());
+            auth.setRefuseReason(dto.getRejectReason());
+            exist.setName(auth.getRealName());
+            exist.setReviewStatus(dto.getStatus());
+            exist.setRejectReason(dto.getRejectReason());
+            craftsmanMapper.updateById(exist);
+            int row = craftsmanAuthMapper.update(new LambdaUpdateWrapper<CraftsmanAuth>()
+                    .eq(CraftsmanAuth::getCraftsmanId, dto.getCraftsmanId())
+                    .set(CraftsmanAuth::getStatus, dto.getStatus())
+                    .set(CraftsmanAuth::getRefuseReason, dto.getRejectReason()));
+            return row > 0 ?Result.success("审核完成") : Result.error("审核失败");
+        }
+        return Result.error("审核失败");
+    }
+
+    private Craftsman copyCraftsmanProperty(CraftsmanReviewDTO dto, Craftsman exist, CraftsmanAuth auth) {
+        exist.setAuthId(auth.getId());
+        exist.setReviewStatus(dto.getStatus());
+        exist.setStatus(dto.getStatus());
+        exist.setName(auth.getRealName());
+        exist.setIdNumber(auth.getIdNumber());
+        exist.setIntroduction(auth.getIntroduction());
+        exist.setTechnique(auth.getTechnique());
+        Craftsman craftsman = new Craftsman();
+        BeanUtils.copyProperties(exist,craftsman);
+        return craftsman;
     }
 
     @Override
     public Result resetPassword(Long craftsmanId) {
         Craftsman craftsman = query().eq("id", craftsmanId).one();
         if (craftsman == null){
-            return Result.error("查询异常!");
+            return Result.error("查询异常");
         }
         craftsman.setPassword(DigestUtils.md5DigestAsHex(PasswordConstant.PASSWORD.getBytes(StandardCharsets.UTF_8)));
-        craftsmanMapper.update(craftsman);
-        stringRedisTemplate.keys("craftsman:*").forEach(key -> {stringRedisTemplate.delete(key);});
-        return Result.success("密码重置成功!");
+        craftsmanMapper.updateById(craftsman);
+        stringRedisTemplate.keys("craftsman:*").forEach(stringRedisTemplate::delete);
+        return Result.success("密码重置成功");
     }
 
     @Override
@@ -325,15 +381,13 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         return Result.success(pageBean);
     }
 
-
-
     @Override
     public Result<?> checkCraftsmanInfo(String username, String phone) {
         String checkDbUsername = UsernamePrifixConstant.CRAFTSMAN_USERNAME_PRIFIX + username;
         if (query().eq("username", checkDbUsername).one() != null){
-            return Result.error("该用户名已被注册!");
+            return Result.error("该用户名已被注册");
         } else if (query().eq("phone", phone).one() != null) {
-            return Result.error("改手机号已被注册!");
+            return Result.error("改手机号已被注册");
         }
         return Result.success();
     }
@@ -341,19 +395,77 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     @Override
     public Result<?> checkEmail(String email) {
         if (query().eq("email",email).one() != null) {
-            return Result.error("该邮箱已被注册!");
+            return Result.error("该邮箱已被注册");
         }
         return Result.success();
     }
 
     @Override
     public Result signUpAuth(CraftsmanAuthDTO craftsmanAuthDTO) {
-        Long craftsmanId = AuthContext.getUserId();
-        craftsmanAuthDTO.setCraftsmanId(craftsmanId);
-        if (craftsmanAuthService.save(craftsmanAuthDTO)){
-            return Result.success("提交成功，请等待管理员审核!");
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        if (!craftsmanAuthDTO.getCraftsmanId().equals(craftsmanId)){
+            return Result.error("匠人信息不一致");
         }
-        return Result.error("提交失败，请检查提交材料是否符合要求!");
+        craftsmanAuthDTO.setCraftsmanId(craftsmanId);
+        CraftsmanAuth auth = new CraftsmanAuth();
+        BeanUtils.copyProperties(craftsmanAuthDTO,auth);
+        if (craftsmanAuthService.save(auth)){
+            return Result.success("提交成功，请等待管理员审核");
+        }
+        return Result.error("提交失败，请检查提交材料是否符合要求");
+    }
+
+    @Override
+    public Result<?> updateAvatar(String avatar) {
+        try {
+            // 从 SaToken 获取当前登录的匠人 ID
+            Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+
+            // 查询匠人
+            Craftsman craftsman = query().eq("id", craftsmanId).one();
+            if (craftsman == null) {
+                return Result.error("匠人不存在");
+            }
+
+            // 更新头像
+            craftsman.setAvatar(avatar);
+            if (updateById(craftsman)) {
+                log.info("匠人 {} 更新头像成功: {}", craftsmanId, avatar);
+                return Result.success("头像更新成功");
+            }
+
+            return Result.error("头像更新失败");
+        } catch (Exception e) {
+            log.error("更新匠人头像失败", e);
+            return Result.error("头像更新失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public Result<PageBean<CraftsmanVO>> frontPage(CraftsmanQuery query) {
+        List<CraftsmanVO> craftsmanVOS = craftsmanMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()),
+                        new LambdaQueryWrapper<Craftsman>()
+                                .eq(Craftsman::getReviewStatus, 1)
+                                .like(query.getName() != null, Craftsman::getName, query.getName())
+                                .orderByDesc(Craftsman::getCreateTime))
+                .getRecords()
+                .stream().map(this::convertToVO)
+                .toList();
+        PageBean pageBean = new PageBean((long)craftsmanVOS.size(),craftsmanVOS);
+        return Result.success(pageBean);
+    }
+
+    @Override
+    public Result<List<ProductListVO>> selectReferenceProduct(Long craftsmanId) {
+        List<ProductListVO> productListVOList = productMapper.selectList(
+                new LambdaQueryWrapper<Product>()
+                        .eq(Product::getCraftsmanId, craftsmanId)
+                        .orderByDesc(Product::getSaleCount)).stream().map(p -> {
+            ProductListVO vo = new ProductListVO();
+            BeanUtils.copyProperties(p, vo);
+            return vo;
+        }).toList();
+        return Result.success(productListVOList);
     }
 
     @Override
@@ -394,8 +506,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,craftsman);
-        return Result.success("登陆成功!");
+        CraftsmanVO craftsmanVO = setSession(craftsman);
+        return Result.success(craftsmanVO);
     }
 
     private Result UsernameLogin(String username, String password,String identifier,HttpServletRequest request) {
@@ -418,35 +530,41 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
             return accountLockCheck.incrementAndCheckLock(identifier);
         }
         accountLockCheck.clearFailCount(identifier);
-        setSession(request,craftsman);
-        return Result.success("登陆成功!");
+        CraftsmanVO craftsmanVO = setSession(craftsman);
+        return Result.success(craftsmanVO);
     }
 
     private CraftsmanVO convertToVO(Craftsman craftsman) {
-        return CraftsmanVO.builder()
-                .id(craftsman.getId())
-                .username(craftsman.getUsername())
-                .phone(craftsman.getPhone())
-                .name(craftsman.getName())
-                .reviewStatus(craftsman.getReviewStatus())
-                .status(craftsman.getStatus())
-                .introduction(craftsman.getIntroduction())
-                .email(craftsman.getEmail())
-                .avatar(craftsman.getAvatar())
-                .createTime(craftsman.getCreateTime())
-                .build();
+        CraftsmanVO vo = new CraftsmanVO();
+        BeanUtils.copyProperties(craftsman, vo);
+        WorkShop workShop = workShopMapper.selectOne(new LambdaQueryWrapper<WorkShop>().eq(WorkShop::getId, craftsman.getWorkshopId()));
+        vo.setWorkshopName(workShop.getWorkshopName());
+        CraftsmanAuth auth = craftsmanAuthMapper.selectOne(new LambdaQueryWrapper<CraftsmanAuth>().eq(CraftsmanAuth::getCraftsmanId, craftsman.getId()));
+        log.info("craftsmanAuth: {}", auth);
+        CraftsmanAuthVO authVO = CraftsmanAuthVO.builder()
+                .craftsmanId(auth.getCraftsmanId())
+                .technique(auth.getTechnique())
+                .proofImages(auth.getProofImages())
+                .masterpieceImages(auth.getMasterpieceImages())
+                .build() ;
+        vo.setProofs(authVO);
+        return vo;
     }
 
     /**
      * 设置 Session
      */
-    private void setSession(HttpServletRequest request, Craftsman craftsman) {
-        HttpSession session = request.getSession(true);
+    private CraftsmanVO setSession(Craftsman craftsman) {
         CraftsmanVO craftsmanVO = convertToVO(craftsman);
-        session.setAttribute("USER", craftsmanVO);
-        session.setAttribute("ROLE", RoleEnum.CRAFTSMAN);
-        session.setAttribute("USER_ID", craftsman.getId());
-        session.setMaxInactiveInterval(30 * 60);
+        // 使用StpKit.CRAFTSMAN进行登录，实现工匠会话隔离
+        StpKit.CRAFTSMAN.login(craftsman.getId());
+        // 将用户信息和角色存储到对应的Session中
+        StpKit.CRAFTSMAN.getSession().set("USER", craftsmanVO);
+        StpKit.CRAFTSMAN.getSession().set("ROLE", RoleEnum.CRAFTSMAN);
+        StpKit.CRAFTSMAN.getSession().set("USER_ID", craftsman.getId());
+        return craftsmanVO;
     }
 
 }
+
+

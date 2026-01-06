@@ -6,6 +6,7 @@ import com.yyblcc.ecommerceplatforms.domain.DTO.LoginDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Admin;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -23,8 +24,6 @@ public interface AdminService extends IService<Admin> {
 
     Result<?> getAdmins();
 
-    Result<PageBean> page(Integer page, Integer pageSize);
-
     Result login(LoginDTO loginDTO, HttpServletRequest request);
 
     Result resetPassword(Long adminId);
@@ -32,4 +31,8 @@ public interface AdminService extends IService<Admin> {
     Result getAdminByName(String name, Integer page, Integer pageSize);
 
     Result pageReview(Integer page, Integer pageSize);
+
+    Result<PageBean> pageAdmins(PageQuery query);
+
+    Result<?> updateAvatar(String avatar);
 }

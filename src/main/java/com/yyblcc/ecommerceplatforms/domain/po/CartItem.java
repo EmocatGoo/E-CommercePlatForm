@@ -1,9 +1,6 @@
 package com.yyblcc.ecommerceplatforms.domain.po;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,23 +17,34 @@ import java.time.LocalDateTime;
 public class CartItem {
     @TableId(type = IdType.AUTO)
     private Long id;
+
     @TableField("cart_id")
     private Long cartId;
+
     @TableField("user_id")
     private Long userId;
+
     @TableField("product_id")
     private Long productId;
+
     @TableField("craftsman_id")
     private Long craftsmanId;
 
     private String productName;
+
     private String productImage;
 
     private BigDecimal price;
+
     private Integer stock;
+
     private Integer quantity;
 
-    private Integer isChecked;
+    @TableField("is_checked")
+    private Integer checked;
+
     private LocalDateTime createTime;
+
     private LocalDateTime updateTime;
+
 }

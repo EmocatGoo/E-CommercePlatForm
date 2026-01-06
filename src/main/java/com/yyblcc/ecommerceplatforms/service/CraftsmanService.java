@@ -2,6 +2,9 @@ package com.yyblcc.ecommerceplatforms.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
+import com.yyblcc.ecommerceplatforms.domain.VO.CraftsmanVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductVO;
 import com.yyblcc.ecommerceplatforms.domain.po.Craftsman;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CraftsmanAuthDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
@@ -32,7 +35,7 @@ public interface CraftsmanService extends IService<Craftsman> {
 
     Result<?> updatePassword(PasswordDTO passwordDTO, HttpServletRequest request);
 
-    Result<?> updateCraftsmanReviewStatus(Integer reviewStatus, Long id);
+    Result<?> updateCraftsmanReviewStatus(CraftsmanReviewDTO dto);
 
     Result resetPassword(Long craftsmanId);
 
@@ -43,4 +46,10 @@ public interface CraftsmanService extends IService<Craftsman> {
     Result<?> checkEmail(String email);
 
     Result signUpAuth(CraftsmanAuthDTO craftsmanAuthDTO);
+
+    Result<?> updateAvatar(String avatar);
+
+    Result<PageBean<CraftsmanVO>> frontPage(CraftsmanQuery query);
+
+    Result<List<ProductListVO>> selectReferenceProduct(Long craftsmanId);
 }

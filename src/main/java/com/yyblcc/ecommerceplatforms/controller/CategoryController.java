@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.controller;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CategoryDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Category;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.CategoryQuery;
 import com.yyblcc.ecommerceplatforms.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,14 +22,13 @@ public class CategoryController {
 
     /**
      * 管理员分页查看分类列表
-     * @param page
-     * @param pageSize
+     * @param query
      * @return
      */
     @GetMapping("/page")
-    public Result pageCategory(@RequestParam(defaultValue = "1") Integer page, @RequestParam(defaultValue = "10") Integer pageSize) {
-        log.info("查询的页面为:{},页面大小为:{}", page, pageSize);
-        return categoryService.pageCategory(page,pageSize);
+    public Result pageCategory(CategoryQuery query) {
+        log.info("查询的页面为:{},页面大小为:{}", query.getPage(), query.getPageSize());
+        return categoryService.pageCategory(query);
     }
 
     /**
@@ -95,4 +95,17 @@ public class CategoryController {
         }
         return Result.success(category);
     }
+
+    @GetMapping("/selectHeritageArticleCategory")
+    public Result<?> selectHeritageArticleCategory() {
+        log.info("查询非遗文化分类");
+        return categoryService.selectHeritageArticleCategory();
+    }
+
+    @GetMapping("/selectCultureGameCategory")
+    public Result<?> selectCultureGameCategory() {
+        log.info("查询文化游戏分类");
+        return categoryService.selectCultureGameCategory();
+    }
+
 }

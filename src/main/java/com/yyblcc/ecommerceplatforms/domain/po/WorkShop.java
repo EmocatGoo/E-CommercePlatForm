@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,8 +15,8 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
-@TableName("tb_workshop")
+@Accessors(chain = true)
+@TableName(value = "tb_workshop",autoResultMap = true)
 public class WorkShop {
     @TableId(type = IdType.AUTO)
     //主键，匠人工作室id
@@ -48,6 +49,8 @@ public class WorkShop {
     private Integer reviewStatus;
     //工作室状态
     private Integer status;
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<String> masterpieceCollection;
 
     //访问量
     private Long visitCount;
