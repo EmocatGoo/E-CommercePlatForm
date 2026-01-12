@@ -5,9 +5,12 @@ import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.DTO.CraftsmanAuthDTO;
 import com.yyblcc.ecommerceplatforms.domain.VO.CraftsmanVO;
 import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
+import com.yyblcc.ecommerceplatforms.domain.po.CraftsmanAuth;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
+import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanAuthQuery;
 import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
+import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
@@ -161,9 +164,9 @@ public class CraftsmanController {
     }
 
     @GetMapping("/page-review")
-    public Result pageReview(@RequestParam Integer page, @RequestParam Integer pageSize){
-        log.info("page={},pageSize={}", page, pageSize);
-        return craftsmanAuthService.pageReview(page,pageSize);
+    public Result<PageBean<CraftsmanAuth>> pageReview(CraftsmanAuthQuery query){
+        log.info("page={},pageSize={}", query.getPage(), query.getPageSize());
+        return craftsmanAuthService.pageReview(query);
     }
 
     /**
@@ -186,4 +189,5 @@ public class CraftsmanController {
     public Result<List<ProductListVO>> selectReferenceProduct(Long craftsmanId) {
         return craftsmanService.selectReferenceProduct(craftsmanId);
     }
+
 }

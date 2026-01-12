@@ -19,15 +19,15 @@ import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.yyblcc.ecommerceplatforms.config.AliPayConfig;
+import com.yyblcc.ecommerceplatforms.domain.DTO.RefundDTO;
 import com.yyblcc.ecommerceplatforms.domain.Enum.OrderStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.Enum.PayStatusEnum;
+import com.yyblcc.ecommerceplatforms.domain.Enum.RefundEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.PaymentVO;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
-import com.yyblcc.ecommerceplatforms.mapper.OrderItemMapper;
-import com.yyblcc.ecommerceplatforms.mapper.OrderMapper;
-import com.yyblcc.ecommerceplatforms.mapper.PaymentMapper;
-import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
+import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.service.PaymentService;
+import com.yyblcc.ecommerceplatforms.util.id.OrderRefundSnGenerator;
 import com.yyblcc.ecommerceplatforms.util.id.PaySnGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +63,8 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     private final ProductMapper productMapper;
     private final OrderItemMapper orderItemMapper;
     private final RocketMQTemplate rocketMQTemplate;
+    private final OrderRefundSnGenerator orderRefundSnGenerator;
+    private final RefundMapper refundMapper;
 
     /**
      * 初始化支付宝配置
@@ -90,22 +92,21 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     // 7. 更新订单的payId和paySn
     // 8. 返回合并支付单号
     @Transactional(rollbackFor = Exception.class)
-    public Result createPayment(List<String> orderSn) throws InterruptedException {
-        if (CollUtil.isEmpty(orderSn)) {
+    public Result createPayment(String orderGroupSn) throws InterruptedException {
+        if (StringUtils.isBlank(orderGroupSn)) {
             return Result.error("订单号列表不能为空");
         }
 
-        String lockKey = "lock:mergePayment:" + orderSn.hashCode();
+        String lockKey = "lock:mergePayment:" + orderGroupSn.hashCode();
         RLock lock = redissonClient.getLock(lockKey);
         if (!lock.tryLock(0, 30, TimeUnit.SECONDS)) {
             return Result.error("正在处理中，请勿重复提交");
         }
         try {
             List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
-                    .eq(Order::getPayStatus, PayStatusEnum.PENDING.getCode())
-            );
-            if (orders.isEmpty() || orders.size() != orderSn.size()) {
+                            .eq(Order::getOrderGroupSn, orderGroupSn)
+                            .eq(Order::getPayStatus, PayStatusEnum.PENDING.getCode()));
+            if (orders.isEmpty() ) {
                 return Result.error("未找到待支付订单");
             }
 
@@ -157,7 +158,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             paymentMapper.insert(payment);
 
             orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
+                    .eq(Order::getOrderGroupSn, orderGroupSn)
                     .set(Order::getPayId, payment.getId())
                     .set(Order::getPaySn, mergePaySn)
                     .set(Order::getPaymentMethod, 0));
@@ -236,23 +237,20 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     }
 
     @Override
-    public Result queryPaymentStatus(List<String> orderSn) {
-        if (CollUtil.isEmpty(orderSn)) {
+    public Result queryPaymentStatus(String orderGroupSn) {
+        if (StringUtils.isEmpty(orderGroupSn)) {
             return Result.error("订单号列表不能为空");
         }
 
         try {
             // 1. 查询订单 + 严格校验
             List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
+                    .eq(Order::getOrderGroupSn, orderGroupSn)
                     .select(Order::getOrderSn, Order::getPaySn, Order::getPayStatus, Order::getOrderStatus)
             );
 
             if (orders.isEmpty()) {
                 return Result.error("订单不存在");
-            }
-            if (orders.size() != orderSn.size()) {
-                return Result.error("部分订单不存在");
             }
 
             // 2. 校验所有订单属于同一支付单
@@ -288,7 +286,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             // 6. 调用支付宝查询真实状态
             AlipayTradeQueryResponse aliResp = queryAlipayStatus(paySn);
             if (aliResp == null) {
-                // 支付宝接口异常 → 不改状态，只返回“查询中”
+                // 支付宝接口异常 → 不改状态，只返回"查询中"
                 return Result.success("支付处理中，请稍后查询");
             }
 
@@ -301,19 +299,26 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             if ("TRADE_SUCCESS".equals(aliResp.getTradeStatus())
                     || "TRADE_FINISHED".equals(aliResp.getTradeStatus())) {
 
+                // 防止重复处理 - 再次检查是否已支付
+                if (Integer.valueOf(PayStatusEnum.PAYED.getCode()).equals(payment.getPayStatus())) {
+                    stringRedisTemplate.delete("order:payment:" + payment.getUserId());
+                    return Result.success("支付成功");
+                }
+
                 // 更新支付单
                 payment.setPayStatus(PayStatusEnum.PAYED.getCode());
                 payment.setPayTime(LocalDateTime.now());
                 paymentMapper.updateById(payment);
 
                 orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                        .in(Order::getOrderSn, orderSn)
+                        .eq(Order::getOrderGroupSn, orderGroupSn)
                         .set(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
                         .set(Order::getOrderStatus, OrderStatusEnum.DISPATCH.getCode())
                 );
-                List<Long> productIdList;
-                productIdList = orderItemMapper.selectList(
-                        new LambdaQueryWrapper<OrderItem>().in(OrderItem::getOrderSn, orderSn))
+                
+                // 更新商品销量
+                List<Long> productIdList = orderItemMapper.selectList(
+                        new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderGroupSn, orderGroupSn))
                         .stream()
                         .map(OrderItem::getProductId)
                         .toList();
@@ -322,6 +327,9 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                     product.setSaleCount(product.getSaleCount() + 1);
                     productMapper.updateById(product);
                 }
+
+                // 支付成功后清理缓存
+                stringRedisTemplate.delete("order:payment:" + payment.getUserId());
 
                 log.info("支付成功，支付宝交易号：{}，合并支付单：{}", aliResp.getTradeNo(), paySn);
 
@@ -332,7 +340,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             return Result.success("支付处理中");
 
         } catch (Exception e) {
-            log.error("查询支付状态异常，orderSn={}", orderSn, e);
+            log.error("查询支付状态异常，orderGroupSn={}", orderGroupSn, e);
             return Result.error("系统异常");
         }
     }
@@ -375,30 +383,46 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
     @Override
     @Transactional(rollbackFor = Exception.class)
     // 1. 查询订单信息
-    // 2. 验证所有订单属于同一支付记录
-    // 3. 调用支付宝退款API
-    // 4. 更新订单状态为已退款
-    // 5. 更新支付状态为已退款
-    public Result<String> refund(List<String> orderSn) {
-        if (CollUtil.isEmpty(orderSn)) {
-            return Result.error("订单号列表不能为空");
+    // 2. 验证订单属于同一支付记录
+    // 3. 计算退款金额（根据商品ID和数量）
+    // 4. 调用支付宝退款API
+    // 5. 更新订单项退款状态
+    // 6. 如订单所有商品都已退款，则更新订单状态为已退款
+    // 7. 如支付总金额全部退款，则更新支付状态为已退款
+
+    // 前端传输此订单的1、订单号 2、对应订单项中的需要退款的商品id 3、退款商品的数量
+    // 根据订单号查询订单表，间接找到支付单号，再根据支付单号查询到支付数据
+    // 通过订单号和商品id定位订单项表中的商品数据，获取商品价格和数量
+    // 如果退款商品数量超过订单项中记录的数量，则报错，否则计算出退款金额（获取到的商品单价 * 退款数量）是否 <= 订单项总金额
+    // 如果是true，则进行退款，否则报错  成功后更新订单项表和支付单表的refund_amount字段
+    public Result<String> refund(RefundDTO dto) {
+        String orderSn = dto.getOrderSn();
+        Long productId = dto.getProductId();
+        Integer refundProductCount = dto.getRefundProductCount();
+
+        if (StringUtils.isEmpty(orderSn)) {
+            return Result.error("订单号不能为空");
         }
+        if (productId == null || refundProductCount == null || refundProductCount <= 0) {
+            return Result.error("退款商品信息不能为空");
+        }
+
         try{
-            List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
+            Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>()
+                    .eq(Order::getOrderSn, orderSn)
                     .eq(Order::getPayStatus, PayStatusEnum.PAYED.getCode())
             );
 
-            if (orders.isEmpty()) {
+            if (order == null) {
                 return Result.error("未找到可退款订单");
             }
 
-            String paySn = orders.getFirst().getPaySn();
-            if (orders.stream().anyMatch(order -> !order.getPaySn().equals(paySn))) {
-                return Result.error("订单不属于同一支付记录，无法批量退款");
+            String paySn = order.getPaySn();
+            if (StringUtils.isBlank(paySn)) {
+                return Result.error("订单未关联支付记录");
             }
 
-            // 查询支付记录获取退款金额
+            // 查询支付记录
             Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
                     .eq(Payment::getMergePaySn, paySn)
                     .eq(Payment::getPayStatus, PayStatusEnum.PAYED.getCode())
@@ -409,67 +433,98 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                 return Result.error("支付记录不存在或已退款");
             }
 
-            BigDecimal refundAmount = orders.stream()
-                    .map(Order::getTotalAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            if (refundAmount.compareTo(payment.getTotalAmount()) != 0){
-                return Result.error("退款金额异常");
+            // 查询订单项，计算退款金额
+            OrderItem orderItem = orderItemMapper.selectOne(new LambdaQueryWrapper<OrderItem>()
+                    .eq(OrderItem::getOrderId, order.getId())
+                    .eq(OrderItem::getProductId, productId)
+                    .last("FOR UPDATE"));
+            if (orderItem == null) {
+                return Result.error("未找到对应的订单商品");
             }
-            String refundSn = "REFUND" + "-" + paySn;
+
+            // 计算实际退款金额
+            BigDecimal refundAmount;
+            if (refundProductCount > orderItem.getQuantity()) {
+               return Result.error("退款商品数量超出");
+            }
+
+            refundAmount = orderItem.getPrice().multiply(new BigDecimal(refundProductCount));
+
+            if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                return Result.error("退款金额计算异常");
+            }
+
+            BigDecimal newRefundAmount = payment.getRefundAmount().add(refundAmount);
+
+            if (newRefundAmount.compareTo(payment.getTotalAmount()) > 0) {
+                return Result.error("退款金额不能超过支付总金额");
+            }
+
+            Refund refund = refundMapper.selectOne(new LambdaQueryWrapper<Refund>()
+                    .eq(Refund::getOrderItemId,orderItem.getId())
+                    .eq(Refund::getProductId,productId));
+            String refundSn = refund.getRefundSn();
             initAlipayClient();
             String refundReason = "用户申请退款";
             AlipayTradeRefundResponse response = Factory.Payment.Common()
-                    .optional("refund_reason",refundReason)
-                    .optional("out_request_no",refundSn)
-                    .refund(paySn,refundAmount.toPlainString());
+                    .optional("refund_reason", refundReason)
+                    .optional("out_request_no", refundSn)
+                    .refund(paySn, refundAmount.toPlainString());
 
             if (!ResponseChecker.success(response)) {
                 log.error("支付宝退款失败: paySn={},refundSn={},code={},subCode={},msg={}",
-                        paySn, refundSn,response.getCode(), response.getSubCode(), response.getSubMsg());
+                        paySn, refundSn, response.getCode(), response.getSubCode(), response.getSubMsg());
                 return Result.error("退款失败：" + response.getSubMsg());
             }
 
             payment.setPayStatus(PayStatusEnum.REFUND.getCode());
+            payment.setRefundAmount(payment.getRefundAmount().add(refundAmount));
             paymentMapper.updateById(payment);
 
-            orderMapper.update(null,new LambdaUpdateWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
-                    .set(Order::getOrderStatus, OrderStatusEnum.REFUND.getCode())
-                    .set(Order::getCancelTime, LocalDateTime.now())
-                    .set(Order::getCancelReason,refundReason)
+            order.setOrderStatus(OrderStatusEnum.REFUND.getCode());
+            order.setRefundAmount(order.getRefundAmount().add(refundAmount));
+            orderMapper.updateById(order);
+
+            orderItem.setRefundStatus(1);
+            orderItem.setRefundAmount(refundAmount);
+            orderItemMapper.updateById(orderItem);
+
+            refundMapper.update(null, new LambdaUpdateWrapper<Refund>().eq(Refund::getOrderSn, orderSn)
+                    .set(Refund::getRefundStatus, RefundEnum.SUCCESS.getCode())
+                    .set(Refund::getRefundTime, LocalDateTime.now())
+                    .set(Refund::getRefundAmount, refundAmount)
                     .last("FOR UPDATE"));
 
-            log.info("退款成功 paySn={} refundSn={} amount={} orders={}",
-                    paySn, refundSn, refundAmount, orderSn);
+            log.info("退款成功 paySn={} refundSn={} amount={} orderSn={} products={} count={}",
+                    paySn, refundSn, refundAmount, orderSn, productId, refundProductCount);
 
             return Result.success("退款成功,预计1-7个工作日内到账");
 
         }catch (Exception e){
             log.error("退款异常 orderSn={}", orderSn, e);
-            throw new RuntimeException("退款处理失败",e);
+            throw new RuntimeException("退款处理失败", e);
         }
     }
 
+
+
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result<String> closeOrder(List<String> orderSn) {
-        if (CollUtil.isEmpty(orderSn)) {
+    public Result<String> closeOrder(String orderGroupSn) {
+        if (StringUtils.isEmpty(orderGroupSn)) {
             return Result.error("订单号列表不能为空");
         }
         try{
             // 1. 查询订单信息
             List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                    .in(Order::getOrderSn, orderSn)
+                    .eq(Order::getOrderGroupSn, orderGroupSn)
                     .eq(Order::getPayStatus, PayStatusEnum.PENDING.getCode())
                     .last("FOR UPDATE")
             );
 
             if (orders.isEmpty()) {
                 return Result.error("未找到待支付订单");
-            }
-            if (orders.size() != orderSn.size()) {
-                return Result.error("部分订单不可取消");
             }
 
             String paySn = orders.getFirst().getPaySn();
@@ -540,4 +595,6 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             throw new RuntimeException("取消失败",e);
         }
     }
+
+
 }

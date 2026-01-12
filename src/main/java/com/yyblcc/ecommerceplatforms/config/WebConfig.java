@@ -26,7 +26,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/craftsman/save",
                         "/craftsman/logout", "/admin/logout","/craftsman/check",
                         "/craftsman/check-email","/user/check", "/user/check-email",
-                        "/email/**",
+                        "/email/**","/search/**","/chat/modelInStream","/chat/modelInStream-notLogin",
+                        "/craftsman/front-page", "/workshop/front-page",
 
                         // 用户相关
                         "/product/by-craftsman","/product/recommend",

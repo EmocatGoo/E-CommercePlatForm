@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.ConsumeMode;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -29,6 +30,7 @@ public class CartDeleteListener implements RocketMQListener<CartDeleteMessage> {
 
     private final CartItemMapper cartItemMapper;
     private final CartMapper cartMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
 
     @Override
@@ -58,15 +60,20 @@ public class CartDeleteListener implements RocketMQListener<CartDeleteMessage> {
                 }
             }
 
-            int deletedRows = cartItemMapper.delete(new LambdaUpdateWrapper<CartItem>()
+            cartItemMapper.delete(new LambdaUpdateWrapper<CartItem>()
                     .eq(CartItem::getUserId, userId)
                     .in(CartItem::getProductId, productIds));
+            productIds.forEach(productId -> {
+                stringRedisTemplate.opsForHash().delete("cart:items:" + userId,"product:"+productId);
+            });
 
-            if (totalQuantity > 0 && totalQuantity == deletedRows) {
+            if (totalQuantity > 0) {
                 cartMapper.update(new LambdaUpdateWrapper<Cart>()
                         .eq(Cart::getUserId, userId)
                         .setSql("item_count = GREATEST(item_count - " + totalQuantity + ", 0)")
                         .setSql("checked_count = GREATEST(checked_count - " + checkedQuantity + ", 0)"));
+                stringRedisTemplate.opsForHash().increment("cart:user:" + userId, "item_count", -totalQuantity);
+                stringRedisTemplate.opsForHash().increment("cart:user:" + userId, "checked_count", -checkedQuantity);
             }
         }catch (Exception e){
             log.error("购物车删除落库失败，userId={}, productIds={}", userId, productIds, e);

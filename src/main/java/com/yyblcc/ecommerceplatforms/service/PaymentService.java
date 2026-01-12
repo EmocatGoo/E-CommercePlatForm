@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.service;
 
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.yyblcc.ecommerceplatforms.domain.DTO.RefundDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Order;
 import com.yyblcc.ecommerceplatforms.domain.po.Payment;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
@@ -12,16 +13,16 @@ import java.util.List;
 
 public interface PaymentService extends IService<Payment> {
 
-    public Result<String> createPayment(List<String> orderSn) throws InterruptedException;
+    Result<String> createPayment(String orderGroupSn) throws InterruptedException;
 
-    public Result<String> queryPaymentStatus(List<String> orderSn);
+    Result<String> queryPaymentStatus(String orderGroupSn);
 
-    public void pendingOrder(Long userId, Order order);
+    void pendingOrder(Long userId, Order order);
 
-    public boolean isOrderAlreadyPending(Long userId);
+    boolean isOrderAlreadyPending(Long userId);
 
-    public Result<String> refund(List<String> orderSn);
+    Result<String> refund(RefundDTO dto);
 
+    Result<String> closeOrder(String orderGroupSn);
 
-    Result<String> closeOrder(List<String> orderSn);
 }

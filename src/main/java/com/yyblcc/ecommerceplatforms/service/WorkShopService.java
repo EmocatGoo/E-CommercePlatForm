@@ -8,6 +8,8 @@ import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.po.WorkShop;
 import com.yyblcc.ecommerceplatforms.domain.query.PageQuery;
 
+import java.util.List;
+
 public interface WorkShopService extends IService<WorkShop> {
     Result reviewWorkshop(Long workshopId, Integer status);
 
@@ -38,4 +40,6 @@ public interface WorkShopService extends IService<WorkShop> {
     Result<PageBean<WorkShopVO>> frontPage(PageQuery query);
 
     Result<Boolean> checkCollect(Long workShopId);
+
+    Result<String> updateMasterPieces(List<String> masterPieces);
 }

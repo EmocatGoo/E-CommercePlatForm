@@ -29,6 +29,7 @@ public class WorkShopVO {
     private LocalDateTime createTime;
 
     // 匠人信息（关联查询）
+    private Long craftsmanId;
     private String craftsmanName;
     private String craftsmanPhone;
     private String craftsmanEmail;
@@ -39,7 +40,9 @@ public class WorkShopVO {
     // 作品集
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> masterpieceCollection;
+
     private Long visitCount;
+
     private Integer collectionCount;
 
     // 商品（关联查询）

@@ -26,9 +26,7 @@ public class CraftsmanAuth {
     private Long craftsmanId;
 
     private String realName;
-    @Sensitive(type = SensitiveType.ID_CARD)
     private String idNumber;
-    @Sensitive(type = SensitiveType.MOBILE_PHONE)
     private String phone;
     private String email;
     private String technique;

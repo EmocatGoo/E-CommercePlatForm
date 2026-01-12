@@ -8,10 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.constant.StatusConstant;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.Enum.ProductStatusEnum;
-import com.yyblcc.ecommerceplatforms.domain.VO.ProductAdminVO;
-import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
-import com.yyblcc.ecommerceplatforms.domain.VO.ProductShowWorkShopVO;
-import com.yyblcc.ecommerceplatforms.domain.VO.WorkShopVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.*;
 import com.yyblcc.ecommerceplatforms.domain.message.ProductLikeFavoriteMessage;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.ProductQuery;
@@ -19,6 +16,7 @@ import com.yyblcc.ecommerceplatforms.exception.BusinessException;
 import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.service.CategoryService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
+import com.yyblcc.ecommerceplatforms.service.ProductEsService;
 import com.yyblcc.ecommerceplatforms.service.ProductService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
@@ -36,6 +34,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -56,6 +55,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
     private final RocketMQTemplate rocketMQTemplate;
     private final CraftsmanMapper craftsmanMapper;
     private final WorkShopMapper workShopMapper;
+    private final ProductEsService productEsService;
 
     @Override
     public PageBean<ProductAdminVO> adminPage(ProductQuery query) {
@@ -107,6 +107,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
         product.setReviewStatus(reviewDTO.getStatus());
         product.setUpdateTime(LocalDateTime.now());
         productMapper.updateById(product);
+        productEsService.saveOrUpdate(product);
         stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
         stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
     }
@@ -125,6 +126,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
     @Override
     public boolean removeByIds(List<Long> ids) {
         if(productMapper.deleteByIds(ids) > 0){
+            ids.forEach(productEsService::deleteById);
             return true;
         }
         return false;
@@ -144,6 +146,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
         product.setCreateTime(LocalDateTime.now());
         product.setUpdateTime(LocalDateTime.now());
         productMapper.insert(product);
+        productEsService.saveOrUpdate(product);
         stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
         stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
     }
@@ -160,6 +163,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
         product.setReviewStatus(ProductStatusEnum.PENDING.getCode());
         product.setUpdateTime(LocalDateTime.now());
         productMapper.updateById(product);
+        productEsService.saveOrUpdate(product);
         stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
         stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
         return Result.success("修改成功，请等待管理员审核");
@@ -205,6 +209,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
             product.setUpdateTime(LocalDateTime.now());
             int row = productMapper.updateById(product);
             if (row > 0) {
+                productEsService.saveOrUpdate(product);
                 stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
                 return Result.success();
             }
@@ -213,6 +218,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
             product.setUpdateTime(LocalDateTime.now());
             int row = productMapper.updateById(product);
             if (row > 0) {
+                productEsService.saveOrUpdate(product);
                 stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
                 return Result.success();
             }
@@ -426,6 +432,7 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
         BeanUtils.copyProperties(productDTO, existingProduct);
         existingProduct.setUpdateTime(LocalDateTime.now());
         if (productMapper.updateById(existingProduct) > 0) {
+            productEsService.saveOrUpdate(existingProduct);
             stringRedisTemplate.keys("product:page:*").forEach(stringRedisTemplate::delete);
             stringRedisTemplate.keys("craftsman:product:page:*").forEach(stringRedisTemplate::delete);
             return Result.success("更新成功");
@@ -461,6 +468,11 @@ public class ProductServiceImplement extends ServiceImpl<ProductMapper, Product>
             BeanUtils.copyProperties(p, vo);
             return vo;
         }).toList());
+    }
+
+    @Override
+    public Result<List<ProductStatisticVO>> getHotProduct() {
+        return Result.success(productMapper.listTop10Products());
     }
 
     private ProductShowWorkShopVO toWorkShopVO(WorkShop workShop) {

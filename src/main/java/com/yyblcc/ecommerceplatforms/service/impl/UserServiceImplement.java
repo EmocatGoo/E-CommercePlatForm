@@ -19,6 +19,7 @@ import com.yyblcc.ecommerceplatforms.domain.po.User;
 import com.yyblcc.ecommerceplatforms.domain.po.UserAddress;
 import com.yyblcc.ecommerceplatforms.mapper.UserAddressMapper;
 import com.yyblcc.ecommerceplatforms.mapper.UserMapper;
+import com.yyblcc.ecommerceplatforms.service.ChatSessionService;
 import com.yyblcc.ecommerceplatforms.service.UserAddressService;
 import com.yyblcc.ecommerceplatforms.service.UserService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
@@ -62,6 +63,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
     private UserAddressService userAddressService;
     @Autowired
     private UserAddressMapper userAddressMapper;
+    private ChatSessionService chatSessionService;
 
 
     @Override
@@ -78,6 +80,7 @@ public class UserServiceImplement extends ServiceImpl<UserMapper, User> implemen
         user.setStatus(1);
         user.setCreateTime(LocalDateTime.now());
         save(user);
+        chatSessionService.createOrGetSession(user.getId(), 100111L);
         return Result.success("注册成功!");
     }
 

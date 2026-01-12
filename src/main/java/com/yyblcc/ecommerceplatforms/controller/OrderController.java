@@ -141,4 +141,10 @@ public class OrderController {
         return orderService.comment(dto);
     }
 
+    @GetMapping("/getAmount")
+    public Result getCraftsmanAmount(@RequestParam Long craftsmanId){
+        log.info("查询匠人所有订单销售额");
+        return orderService.getCraftsmanSalesAmount(craftsmanId);
+    }
+
 }

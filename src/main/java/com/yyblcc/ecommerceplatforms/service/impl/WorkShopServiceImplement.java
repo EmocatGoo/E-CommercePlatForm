@@ -48,7 +48,6 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     private final CraftsmanService craftsmanService;
     private final UserCollectMapper userCollectMapper;
     private final ProductService productService;
-    private final CraftsmanMapper craftsmanMapper;
 
     @Override
     public Result reviewWorkshop(Long workshopId, Integer status) {
@@ -56,7 +55,6 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
 
         if (success){
             try{
-                stringRedisTemplate.keys("workshop:*").forEach(stringRedisTemplate::delete);
                 return Result.success("更新成功");
             }catch (Exception e){
                 throw new RuntimeException(e.getMessage());
@@ -69,7 +67,6 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     public Result banWorkshop(Long workshopId) {
         boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getId, workshopId).set(WorkShop::getStatus, 0).update();
         if (success){
-            stringRedisTemplate.keys("workshop:*").forEach(stringRedisTemplate::delete);
             return Result.success("工作室已被关闭");
         }
         return Result.error("发生错误!");
@@ -77,21 +74,6 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
 
     @Override
     public Result pageWorkShop(PageQuery query) {
-        boolean isCondition = query.getKeyword() != null;
-        String key = "workshop:page:" + query.getPage() + ":" +query.getPageSize();
-        if (!isCondition){
-            try{
-                String workshopStr = stringRedisTemplate.opsForValue().get(key);
-                if (workshopStr != null){
-                    if (workshopStr.isEmpty()){
-                        return Result.success();
-                    }
-                    return Result.success(JSON.parseObject(workshopStr, PageBean.class));
-                }
-            } catch (RuntimeException e) {
-                throw new RuntimeException(e);
-            }
-        }
         Page<WorkShop> workShopList = workShopMapper.selectPage(new Page<>(query.getPage(),query.getPageSize()),
                 new LambdaQueryWrapper<WorkShop>()
                         .like(query.getKeyword() != null , WorkShop::getWorkshopName, query.getKeyword())
@@ -103,30 +85,15 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
             workShopVOList.add(workShopVO);
         });
         PageBean pageBean = new PageBean(workShopList.getTotal(),workShopVOList);
-        if (!isCondition){
-            stringRedisTemplate.opsForValue().set(key,JSON.toJSONString(pageBean),10, TimeUnit.MINUTES);
-        }
 
         return Result.success(pageBean);
     }
 
     @Override
     public Result getWorkShopByCraftsmanId(Long craftsmanId) {
-        try{
-            String workShopStr = stringRedisTemplate.opsForValue().get("workshop:craftsmanId:" + craftsmanId);
-            if (workShopStr != null){
-                if (workShopStr.isEmpty()){
-                    return Result.error("您还未创建工作室");
-                }
-                return Result.success(JSON.parseObject(workShopStr,WorkShopVO.class));
-            }
-        }catch (Exception e){
-            log.error(e.getMessage(),e);
-            return Result.error(e.getMessage());
-        }
+
         WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
         if (workShop == null){
-            stringRedisTemplate.opsForValue().set("workshop:craftsmanId:"+craftsmanId,"null", Duration.ofMinutes(5));
             return Result.error("您还未创建工作室");
         }
         WorkShopVO workShopVO = convertToVO(workShop);
@@ -317,10 +284,22 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
         return Result.success(workShopList);
     }
 
+    @Override
+    public Result<String> updateMasterPieces(List<String> masterPieces) {
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        WorkShop workShop = query().eq("craftsman_id", craftsmanId).one();
+        workShop.setMasterpieceCollection(masterPieces);
+        if (updateById(workShop)) {
+            return Result.success("更新成功");
+        }
+        return Result.error("更新失败");
+    }
+
     public WorkShopVO convertToVO(WorkShop workShop) {
         WorkShopVO workShopVO = new WorkShopVO();
         BeanUtils.copyProperties(workShop,workShopVO);
         Craftsman craftsman = craftsmanService.query().eq("id", workShop.getCraftsmanId()).one();
+        workShopVO.setCraftsmanId(craftsman.getId());
         workShopVO.setCraftsmanName(craftsman.getName());
         workShopVO.setCraftsmanPhone(craftsman.getPhone());
         workShopVO.setCraftsmanEmail(craftsman.getEmail());

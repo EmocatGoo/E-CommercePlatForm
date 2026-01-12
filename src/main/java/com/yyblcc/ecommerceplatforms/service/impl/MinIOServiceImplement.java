@@ -28,8 +28,7 @@ public class MinIOServiceImplement implements MinIOService {
     @Override
     public String uploadFile(MultipartFile file) throws Exception{
         String originalFilename = file.getOriginalFilename();
-        String fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        String fileName = System.currentTimeMillis() + "_" + originalFilename + fileExtension;
+        String fileName = System.currentTimeMillis() + "_" + originalFilename;
         minioClient.putObject(
                 PutObjectArgs.builder()
                         .bucket(bucketName)

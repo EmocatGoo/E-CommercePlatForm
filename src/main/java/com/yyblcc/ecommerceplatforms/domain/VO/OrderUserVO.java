@@ -12,8 +12,8 @@ import java.util.List;
 public class OrderUserVO {
     private Long orderId;
     private BigDecimal totalAmount;
-    private String orderSn;
-    private String paySn;
+    private List<String> orderSn;
+    private String orderGroupSn;
     private Integer orderStatus;
     private LocalDateTime createTime;
     private LocalDateTime payTime;

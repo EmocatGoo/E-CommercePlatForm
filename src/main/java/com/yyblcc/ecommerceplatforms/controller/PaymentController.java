@@ -2,6 +2,7 @@ package com.yyblcc.ecommerceplatforms.controller;
 
 import com.alipay.easysdk.factory.Factory;
 import com.alipay.easysdk.payment.common.models.AlipayTradeFastpayRefundQueryResponse;
+import com.yyblcc.ecommerceplatforms.domain.DTO.RefundDTO;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.service.PaymentService;
 import lombok.RequiredArgsConstructor;
@@ -16,13 +17,13 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/QR")
-    public Result<String> QRCode(@RequestBody List<String> orderSn) throws InterruptedException {
-        return paymentService.createPayment(orderSn);
+    public Result<String> QRCode(@RequestBody String orderGroupSn) throws InterruptedException {
+        return paymentService.createPayment(orderGroupSn);
     }
 
     @PostMapping("/status/query")
-    public Result<?> queryStatus(@RequestBody List<String> orderSn) {
-        return paymentService.queryPaymentStatus(orderSn);
+    public Result<?> queryStatus(@RequestBody String orderGroupSn) {
+        return paymentService.queryPaymentStatus(orderGroupSn);
     }
 
     @GetMapping("/repay")
@@ -30,9 +31,12 @@ public class PaymentController {
         return null;
     }
 
+    /*
+    退款单个商品
+     */
     @PostMapping("/refund")
-    public Result<String> refund(@RequestBody List<String> orderSn) throws Exception {
-        return paymentService.refund(orderSn);
+    public Result<String> refund(@RequestBody RefundDTO dto) throws Exception {
+        return paymentService.refund(dto);
     }
 
     @GetMapping("/refundQuery")
@@ -41,8 +45,8 @@ public class PaymentController {
     }
 
     @PostMapping("/close")
-    public Result<String> closeOrder(@RequestBody List<String> orderSn) {
-        return paymentService.closeOrder(orderSn);
+    public Result<String> closeOrder(@RequestBody String orderGroupSn) {
+        return paymentService.closeOrder(orderGroupSn);
     }
 
 }

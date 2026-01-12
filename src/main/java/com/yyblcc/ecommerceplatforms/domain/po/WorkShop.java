@@ -26,14 +26,19 @@ public class WorkShop {
 
     //工作室名称
     private String workshopName;
+
     //工作室描述
     private String description;
+
     //工作室地址
     private String location;
+
     //工作室logo
     private String workshopLogo;
+
     //工作室封面
     private String coverImage;
+
     //技艺介绍
     private String techniqueIntro;
 
@@ -43,17 +48,22 @@ public class WorkShop {
 
     //创作故事
     private String story;
+
     //工作室创建时间
     private LocalDateTime createTime;
+
     //申请后的审核状态
     private Integer reviewStatus;
+
     //工作室状态
     private Integer status;
+
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> masterpieceCollection;
 
     //访问量
     private Long visitCount;
+
     //收藏量
     private Integer collectionCount;
 

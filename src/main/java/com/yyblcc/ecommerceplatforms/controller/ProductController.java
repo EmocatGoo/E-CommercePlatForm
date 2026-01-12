@@ -2,6 +2,7 @@ package com.yyblcc.ecommerceplatforms.controller;
 
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductStatisticVO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
 import com.yyblcc.ecommerceplatforms.domain.query.ProductQuery;
@@ -196,6 +197,11 @@ public class ProductController {
     @GetMapping("/referRecommend")
     public Result<List<ProductListVO>> referRecommend(@RequestParam Long productId) {
         return productService.referRecommend(productId);
+    }
+
+    @GetMapping("/hot")
+    public Result<List<ProductStatisticVO>> getHotProduct() {
+        return productService.getHotProduct();
     }
 
 }

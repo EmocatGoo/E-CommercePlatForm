@@ -52,4 +52,6 @@ public interface CraftsmanService extends IService<Craftsman> {
     Result<PageBean<CraftsmanVO>> frontPage(CraftsmanQuery query);
 
     Result<List<ProductListVO>> selectReferenceProduct(Long craftsmanId);
+
+
 }

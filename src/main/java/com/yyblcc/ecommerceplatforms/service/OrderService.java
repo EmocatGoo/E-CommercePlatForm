@@ -43,4 +43,6 @@ public interface OrderService extends IService<Order> {
     Result getAllOrders();
 
     Result comment(OrderCommentDTO orderDTO);
+
+    Result getCraftsmanSalesAmount(Long craftsmanId);
 }

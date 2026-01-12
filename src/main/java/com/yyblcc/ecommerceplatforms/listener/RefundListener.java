@@ -37,6 +37,6 @@ public class RefundListener implements RocketMQListener<Refund> {
                 .set(OrderItem::getRefundStatus, OrderStatusEnum.SUCCESS.getCode())
                 .set(OrderItem::getRefundAmount,refund.getRefundAmount())
                 .last("FOR UPDATE"));
-        paymentService.refund(Collections.singletonList(refund.getOrderSn()));
+//        paymentService.refund(refund.getOrderSn());
     }
 }

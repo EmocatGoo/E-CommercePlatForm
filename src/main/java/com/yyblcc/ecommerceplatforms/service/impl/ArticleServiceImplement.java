@@ -6,6 +6,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
@@ -22,6 +23,7 @@ import com.yyblcc.ecommerceplatforms.exception.BusinessException;
 import com.yyblcc.ecommerceplatforms.mapper.ArticleFavoriteMapper;
 import com.yyblcc.ecommerceplatforms.mapper.ArticleLikeMapper;
 import com.yyblcc.ecommerceplatforms.mapper.ArticleMapper;
+import com.yyblcc.ecommerceplatforms.service.ArticleRankService;
 import com.yyblcc.ecommerceplatforms.service.ArticleService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
@@ -51,7 +53,7 @@ import java.util.concurrent.TimeUnit;
 public class ArticleServiceImplement extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
     private final ArticleMapper articleMapper;
     private final StringRedisTemplate stringRedisTemplate;
-
+    private final ArticleRankService articleRankService;
     private final RocketMQTemplate rocketMQTemplate;
     private static final DefaultRedisScript<Long> LIKE_SCRIPT;
     static {
@@ -309,6 +311,8 @@ public class ArticleServiceImplement extends ServiceImpl<ArticleMapper, Article>
                     } catch (RuntimeException e) {
                         log.warn("无缓存信息");
                     }
+                    stringRedisTemplate.opsForZSet()
+                            .remove("article:hot:zset:type3", articleId.toString());
                     return Result.success("已下架");
                 }
             }
@@ -323,6 +327,20 @@ public class ArticleServiceImplement extends ServiceImpl<ArticleMapper, Article>
 
     @Override
     public Result<List<ArticleVO>> getKnowledgeArticleByViewCount() {
+        try {
+            List<ArticleVO> zsetArticles = articleRankService.getHotArticlesFromZSet(6);
+            if (!CollectionUtils.isEmpty(zsetArticles) && zsetArticles.size() >= 3) {
+                log.debug("使用ZSet获取热门文章，数量: {}", zsetArticles.size());
+                return Result.success(zsetArticles);
+            }
+        } catch (Exception e) {
+            log.warn("ZSet获取失败，降级到原方案", e);
+        }
+
+        return getHotArticlesWithOriginalCache();
+    }
+
+    private Result<List<ArticleVO>> getHotArticlesWithOriginalCache() {
         String key = "article:heritage:hot";
         try{
             String cacheStr = stringRedisTemplate.opsForValue().get(key);
@@ -401,8 +419,10 @@ public class ArticleServiceImplement extends ServiceImpl<ArticleMapper, Article>
             boolean success = update(new LambdaUpdateWrapper<Article>()
                     .eq(Article::getId, articleId)
                     .setSql("view_count = view_count + 1"));
+
             if (success) {
                 log.info("文章id为：{} 文章浏览量+1", articleId);
+                articleRankService.recordArticleViewForZSet(articleId,userId);
             }
         }catch (Exception e){
             log.warn("记录文章{}浏览量发生异常，用户{}：{}", articleId, userId, e.getMessage());

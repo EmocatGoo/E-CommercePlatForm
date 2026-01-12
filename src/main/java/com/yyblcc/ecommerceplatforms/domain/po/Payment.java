@@ -20,20 +20,31 @@ import java.time.LocalDateTime;
 public class Payment {
     @TableId(type = IdType.AUTO)
     private Long id;
+
     //支付单号
     private String mergePaySn;
+
     //支付用户id
     private Long userId;
+
     //合计支付金额
     private BigDecimal totalAmount;
+
     //子订单数量
     private Integer orderCount;
+
     //支付状态
     private Integer payStatus;
+
+    //退款金额
+    private BigDecimal refundAmount;
+
     //支付创建时间
     private LocalDateTime createTime;
+
     //支付完成时间
     private LocalDateTime payTime;
+
     //支付过期时间
     private LocalDateTime expireTime;
 

@@ -11,6 +11,7 @@ import java.util.List;
 @Builder
 public class CreateOrderVO {
     private List<String> orderSn;
+    private String orderGroupSn;
     private BigDecimal totalAmount;
     private LocalDateTime createTime;
 }

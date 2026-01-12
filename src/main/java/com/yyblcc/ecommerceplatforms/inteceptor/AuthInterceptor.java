@@ -167,7 +167,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
         return uri.startsWith("/user/") ||
-                uri.startsWith("/order/") ||
+                uri.startsWith("/order/") || uri.startsWith("/order") ||
                 uri.startsWith("/pay/") ||
                 uri.startsWith("/comment") ||
                 uri.startsWith("/oss/") ||

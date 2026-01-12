@@ -1,6 +1,7 @@
 package com.yyblcc.ecommerceplatforms.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import co.elastic.clients.elasticsearch._types.Script;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -19,15 +20,20 @@ import com.yyblcc.ecommerceplatforms.mapper.*;
 import com.yyblcc.ecommerceplatforms.service.*;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
 import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
+import com.yyblcc.ecommerceplatforms.util.id.OrderGroupSnGenerator;
+import com.yyblcc.ecommerceplatforms.util.id.OrderRefundSnGenerator;
 import com.yyblcc.ecommerceplatforms.util.id.OrderSnGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -48,12 +54,22 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     private final StringRedisTemplate stringRedisTemplate;
     private final ProductMapper productMapper;
     private final OrderSnGenerator orderSnGenerator;
+    private final OrderGroupSnGenerator ogSnGenerator;
+    private final OrderRefundSnGenerator orSnGenerator;
     private final RocketMQTemplate rocketMQTemplate;
     private final OrderCommentMapper orderCommentMapper;
     private static final String DELETE_CART_TOPIC = "cart-delete-topic";
     private static final String ORDER_REFUND_TOPIC = "order-refund-topic";
     private final OrderItemMapper orderItemMapper;
     private final RefundMapper refundMapper;
+    private static final DefaultRedisScript<Long> PRODUCTSTOCK_SCIPT;
+    private final PaymentMapper paymentMapper;
+    static{
+        PRODUCTSTOCK_SCIPT = new DefaultRedisScript<>();
+        PRODUCTSTOCK_SCIPT.setResultType(Long.class);
+        PRODUCTSTOCK_SCIPT.setLocation(new ClassPathResource("product_stock.lua"));
+    }
+
 
 
     @Override
@@ -94,23 +110,93 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     @Override
     public Result<PageBean<OrderUserVO>> pageUserOrders(OrderQuery orderQuery) {
         Long userId = StpKit.USER.getLoginIdAsLong();
-        Page<Order> orderPage = orderMapper.selectPage(new Page<>(orderQuery.getPage(), orderQuery.getPageSize()),
-                        new LambdaQueryWrapper<Order>()
-                                .eq(Order::getUserId, userId)
-                                .like(orderQuery.getOrderSn() != null, Order::getOrderSn, orderQuery.getOrderSn())
-                                .eq(orderQuery.getOrderStatus() != null,Order::getOrderStatus, orderQuery.getOrderStatus())
-                                .between(orderQuery.getBeginTime() != null && orderQuery.getEndTime() != null, Order::getCreateTime, orderQuery.getBeginTime(), orderQuery.getEndTime())
-                                .orderByDesc(Order::getCreateTime));
-        List<OrderUserVO> orderUserVOList = orderPage.getRecords().stream()
-                .map(this::convertToOrderUserVO)
-                .toList();
-        log.warn("查询到的订单个数为:{}",orderPage.getTotal());
-        PageBean<OrderUserVO> pageBean = new PageBean<>(orderPage.getTotal(),orderUserVOList);
-        return Result.success(pageBean);
+
+        int page = orderQuery.getPage();
+        int pageSize = orderQuery.getPageSize();
+        int offset = (page - 1) * pageSize;
+        List<UserPageGroupDTO> groupList = orderMapper.selectOrderGroupPage(userId,
+                orderQuery.getOrderStatus(),
+                orderQuery.getBeginTime(),
+                orderQuery.getEndTime(),
+                offset,
+                pageSize);
+        if (CollUtil.isEmpty(groupList)){
+            return Result.success(new PageBean<>(0L,new ArrayList<>()));
+        }
+
+        List<String> groupSnList = groupList.stream().map(UserPageGroupDTO::getOrderGroupSn).toList();
+
+        long total = orderMapper.countOrderGroup(userId,
+                orderQuery.getOrderStatus(),
+                orderQuery.getBeginTime(),
+                orderQuery.getEndTime());
+
+        List<Order> orderList = orderMapper.selectList(
+                new LambdaQueryWrapper<Order>()
+                        .in(Order::getOrderGroupSn, groupSnList)
+                        .eq(Order::getUserId, userId)
+                        .orderByDesc(Order::getCreateTime));
+
+        Map<String, List<Order>> groupMap = orderList.stream()
+                .collect(Collectors.groupingBy(Order::getOrderGroupSn));
+
+        List<OrderUserVO> voList = new ArrayList<>();
+
+        for (String groupSn : groupSnList) {
+            List<Order> orders = groupMap.get(groupSn);
+            if (CollUtil.isEmpty(orders)) {
+                continue;
+            }
+
+            Order first = orders.getFirst();
+
+            OrderUserVO vo = OrderUserVO.builder()
+                    .orderGroupSn(groupSn)
+                    .orderStatus(first.getOrderStatus())
+                    .consignee(first.getConsignee())
+                    .shippingAddress(first.getShippingAddress())
+                    .phone(first.getPhone())
+                    .expressNo(first.getExpressNo())
+                    .expressCompany(first.getExpressCompany())
+                    .paymentMethod(first.getPaymentMethod())
+                    .payTime(first.getPayTime())
+                    .createTime(first.getCreateTime())
+                    .build();
+
+            // 总金额（子订单求和）
+            vo.setTotalAmount(
+                    orders.stream()
+                            .map(Order::getTotalAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            );
+
+            // 子订单号
+            List<String> orderSnList = orders.stream()
+                    .map(Order::getOrderSn)
+                    .toList();
+            vo.setOrderSn(orderSnList);
+
+            // 查询订单项
+            List<OrderItem> orderItems = orderItemMapper.selectList(
+                    new LambdaQueryWrapper<OrderItem>()
+                            .in(OrderItem::getOrderSn, orderSnList)
+            );
+
+            vo.setItems(
+                    orderItems.stream()
+                            .map(this::convertToOrderItemUserVO)
+                            .toList()
+            );
+
+            voList.add(vo);
+        }
+
+        return Result.success(new PageBean<>(total, voList));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @ExceptionHandler(value = Exception.class)
     @UpdateBloomFilter
     public Result<CreateOrderVO> createOrder(OrderDTO orderDTO) {
         Long userId = StpKit.USER.getLoginIdAsLong();
@@ -155,7 +241,8 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             // 为每个工匠创建独立的订单
             BigDecimal overallTotalAmount = BigDecimal.ZERO;
             List<String> orderSnList = new ArrayList<>();
-            
+
+            String orderGroupSn = ogSnGenerator.generateOrderGroupSn();
             for (Map.Entry<Long, List<OrderItemDTO>> entry : craftsmanItemsMap.entrySet()) {
                 Long craftsmanId = entry.getKey();
                 List<OrderItemDTO> craftsmanItems = entry.getValue();
@@ -201,6 +288,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                                         orderDTO.getDistrict() + orderDTO.getDetailAddress();
                 Order order = Order.builder()
                         .orderSn(orderSn)
+                        .orderGroupSn(orderGroupSn)
                         .userId(userId)
                         .craftsmanId(craftsmanId)
                         .totalAmount(orderTotalAmount)
@@ -222,22 +310,31 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 for (OrderItem item : orderItemList) {
                     item.setOrderId(order.getId());
                     item.setOrderSn(orderSn);
+                    item.setOrderGroupSn(orderGroupSn);
                     item.setUserId(userId);
                     item.setCreateTime(LocalDateTime.now());
                     item.setUpdateTime(LocalDateTime.now());
                 }
                 
                 orderItemService.saveBatch(orderItemList);
-                
-                // 预扣减库存（使用乐观锁，检查库存是否足够）
+
                 for (OrderItem item : orderItemList) {
-                    int rows = productMapper.update(new LambdaUpdateWrapper<Product>()
-                            .eq(Product::getId, item.getProductId())
-                            .ge(Product::getStock, item.getQuantity())
-                            .setSql("stock = stock - " + item.getQuantity()));
-                    
-                    if (rows == 0) {
+                    Long result = stringRedisTemplate.execute(
+                            PRODUCTSTOCK_SCIPT,
+                            Collections.emptyList(),
+                            item.getProductId().toString(),
+                            item.getQuantity().toString()
+                    );
+                    if(result == 1){
+                        throw new BusinessException("商品[" + item.getProductName() + "]不存在，请重新下单");
+                    }
+                    else if (result == 2) {
                         throw new BusinessException("商品[" + item.getProductName() + "]库存不足，请重新下单");
+                    }
+                    else if(result == 0){
+                        productMapper.update(new LambdaUpdateWrapper<Product>()
+                                .eq(Product::getId, item.getProductId())
+                                .setSql("stock = stock - " + item.getQuantity()));
                     }
                 }
             }
@@ -262,6 +359,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
             
             return Result.success(CreateOrderVO.builder()
                     .orderSn(orderSnList)
+                    .orderGroupSn(orderGroupSn)
                     .totalAmount(overallTotalAmount)
                     .createTime(LocalDateTime.now())
                     .build());
@@ -357,10 +455,10 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         //用户通过自己的订单记录选择退款项目，指定退款物，可以获得需退款商品的productId;会给前端返回paySn，通过paySn找到订单集合orders，通过orders再查找orderItem，具体是利用ordetItemMapper，指定eq为userId,productId,in（orders）。
         //orderItem下有refund实体需要的orderId,orderSn,userId,craftsmanId,productId,productName,productImage,quantity,totalAmount->refundAmount
         String paySn = userSignUpRefundDTO.getPaySn();
-        Long userId = AuthContext.getUserId();
-        List<Long> productIds = userSignUpRefundDTO.getProductIds();
+        Long userId = StpKit.USER.getLoginIdAsLong();
+        Long productId = userSignUpRefundDTO.getProductId();
         
-        if (CollUtil.isEmpty(productIds)) {
+        if (productId == null) {
             throw new BusinessException("请选择需要退款的商品");
         }
         
@@ -382,53 +480,41 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
         }
 
         // 查询所有选中的订单项
-        List<OrderItem> orderItems = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
+        OrderItem orderItem = orderItemMapper.selectOne(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getUserId, userId)
-                .in(OrderItem::getProductId, productIds)
+                .eq(OrderItem::getProductId, productId)
                 .in(OrderItem::getOrderSn, orderSnList)
                 .last("FOR UPDATE"));
 
-        if (CollUtil.isEmpty(orderItems)) {
-            throw new BusinessException("未找到对应订单项，退款失败");
-        }
-        
-        // 验证所有选中的商品都找到了对应的订单项
-        Set<Long> foundProductIds = orderItems.stream()
-                .map(OrderItem::getProductId)
-                .collect(Collectors.toSet());
-        
-        for (Long productId : productIds) {
-            if (!foundProductIds.contains(productId)) {
-                throw new BusinessException("商品ID " + productId + " 未找到对应订单项");
-            }
+        if (orderItem == null) {
+            return Result.error("未找到订单内容");
         }
 
-        // 为每个订单项创建退款记录
-        for (OrderItem orderItem : orderItems) {
-            // 生成唯一的退款单号，格式：REFUND-支付号-时间戳-商品索引
-            String refundSn = "REFUND" + "-" + paySn + orderItem.getProductId();
-            
-            refundMapper.insert(Refund.builder()
-                    .refundSn(refundSn)
-                    .orderId(orderItem.getOrderId())
-                    .orderSn(orderItem.getOrderSn())
-                    .orderItemId(orderItem.getId())
-                    .userId(orderItem.getUserId())
-                    .craftsmanId(orderItem.getCraftsmanId())
-                    .productId(orderItem.getProductId())
-                    .productName(orderItem.getProductName())
-                    .productImage(orderItem.getProductImage())
-                    .quantity(orderItem.getQuantity())
-                    .refundAmount(orderItem.getTotalAmount())
-                    .applyReason(userSignUpRefundDTO.getRefundReason())
-                    .applyDesc(userSignUpRefundDTO.getRefundDesc())
-                    .applyImages(userSignUpRefundDTO.getRefundImage())
-                    .refundType(userSignUpRefundDTO.getRefundType())
-                    .refundStatus(RefundEnum.APPLY.getCode())
-                    .paySn(paySn)
-                    .build());
+        if (!productId.equals(orderItem.getProductId())){
+            return Result.error("非订单商品");
         }
-        
+
+        String refundSn = orSnGenerator.generateOrderRefundSn();
+        refundMapper.insert(Refund.builder()
+                .refundSn(refundSn)
+                .orderId(orderItem.getOrderId())
+                .orderSn(orderItem.getOrderSn())
+                .orderItemId(orderItem.getId())
+                .userId(orderItem.getUserId())
+                .craftsmanId(orderItem.getCraftsmanId())
+                .productId(orderItem.getProductId())
+                .productName(orderItem.getProductName())
+                .productImage(orderItem.getProductImage())
+                .quantity(orderItem.getQuantity())
+                .refundAmount(orderItem.getTotalAmount())
+                .applyReason(userSignUpRefundDTO.getRefundReason())
+                .applyDesc(userSignUpRefundDTO.getRefundDesc())
+                .applyImages(userSignUpRefundDTO.getRefundImage())
+                .refundType(userSignUpRefundDTO.getRefundType())
+                .refundStatus(RefundEnum.APPLY.getCode())
+                .paySn(paySn)
+                .build());
+
         return Result.success("已申请退款，请等待商家审核");
     }
 
@@ -593,6 +679,11 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
     }
 
     @Override
+    public Result<BigDecimal> getCraftsmanSalesAmount(Long craftsmanId) {
+        return Result.success(orderMapper.calculateOrderSaleAmount(craftsmanId));
+    }
+
+    @Override
     public Result<List<OrderUserVO>> myOrder() {
         Long userId = StpKit.USER.getLoginIdAsLong();
         List<OrderUserVO> orders = list(new LambdaQueryWrapper<Order>()
@@ -613,7 +704,6 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .toList();
         return OrderUserVO.builder()
                 .orderId(order.getId())
-                .paySn(order.getPaySn())
                 .expressNo(order.getExpressNo())
                 .expressCompany(order.getExpressCompany())
                 .orderStatus(order.getOrderStatus())
@@ -626,7 +716,6 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .paymentMethod(order.getPaymentMethod())
                 .expressCompany(order.getExpressCompany())
                 .expressNo(order.getExpressNo())
-                .orderSn(order.getOrderSn())
                 .items(itemVOList)
                 .build();
     }
@@ -682,6 +771,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .toList();
 
         User orderUser = userService.query().eq("id",order.getUserId()).one();
+
         return OrderCraftsmanVO.builder()
                 .orderSn(order.getOrderSn())
                 .paySn(order.getPaySn())
@@ -691,7 +781,7 @@ public class OrderServiceImplement extends ServiceImpl<OrderMapper, Order> imple
                 .orderStatus(order.getOrderStatus())
                 .payTime(order.getPayTime())
                 .consignee(order.getConsignee())
-                .phone(orderUser.getPhone())
+                .phone(order.getPhone())
                 .shippingAddress(order.getShippingAddress())
                 .expressCompany(order.getExpressCompany())
                 .expressNo(order.getExpressNo())

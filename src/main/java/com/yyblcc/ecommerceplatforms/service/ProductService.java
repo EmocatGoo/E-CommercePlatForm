@@ -3,6 +3,7 @@ package com.yyblcc.ecommerceplatforms.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.VO.ProductListVO;
+import com.yyblcc.ecommerceplatforms.domain.VO.ProductStatisticVO;
 import com.yyblcc.ecommerceplatforms.domain.po.PageBean;
 import com.yyblcc.ecommerceplatforms.domain.po.Product;
 import com.yyblcc.ecommerceplatforms.domain.po.Result;
@@ -38,4 +39,6 @@ public interface ProductService extends IService<Product> {
     Result<?> getProductWorkShop(Long productId);
 
     Result<List<ProductListVO>> referRecommend(Long productId);
+
+    Result<List<ProductStatisticVO>> getHotProduct();
 }

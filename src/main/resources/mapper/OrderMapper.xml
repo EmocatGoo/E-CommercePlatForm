@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.yyblcc.ecommerceplatforms.mapper.OrderMapper">
+
+    <select id="selectOrderGroupPage" parameterType="com.yyblcc.ecommerceplatforms.domain.DTO.UserPageGroupDTO">
+        SELECT
+        order_group_sn     AS orderGroupSn,
+        MAX(create_time)   AS latestTime
+        FROM tb_orders
+        WHERE user_id = #{userId}
+        <if test="orderStatus != null">
+            AND order_status = #{orderStatus}
+        </if>
+        <if test="beginTime != null and endTime != null">
+            AND create_time BETWEEN #{beginTime} AND #{endTime}
+        </if>
+        GROUP BY order_group_sn
+        ORDER BY latestTime DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+
+    <select id="countOrderGroup" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT order_group_sn)
+        FROM tb_orders
+        WHERE user_id = #{userId}
+        <if test="orderStatus != null">
+            AND order_status = #{orderStatus}
+        </if>
+        <if test="beginTime != null and endTime != null">
+            AND create_time BETWEEN #{beginTime} AND #{endTime}
+        </if>
+    </select>
+    <select id="selectOrderByOrderGroupSnAndPayStatus"
+            resultType="com.yyblcc.ecommerceplatforms.domain.po.Order">
+        SELECT * FROM tb_orders WHERE order_group_sn = #{orderGroupSn} AND pay_status = #{payStatus} AND is_deleted = 0
+    </select>
+
+</mapper>

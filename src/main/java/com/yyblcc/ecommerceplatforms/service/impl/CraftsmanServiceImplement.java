@@ -5,7 +5,6 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
-import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yyblcc.ecommerceplatforms.constant.PasswordConstant;
@@ -13,25 +12,27 @@ import com.yyblcc.ecommerceplatforms.constant.StatusConstant;
 import com.yyblcc.ecommerceplatforms.constant.UsernamePrifixConstant;
 import com.yyblcc.ecommerceplatforms.domain.DTO.*;
 import com.yyblcc.ecommerceplatforms.domain.Enum.RoleEnum;
-import com.yyblcc.ecommerceplatforms.domain.Enum.WorkShopStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.VO.*;
+import com.yyblcc.ecommerceplatforms.domain.document.CraftsmanDocument;
 import com.yyblcc.ecommerceplatforms.domain.po.*;
 import com.yyblcc.ecommerceplatforms.domain.query.CraftsmanQuery;
+import com.yyblcc.ecommerceplatforms.repository.CraftsmanRepository;
 import com.yyblcc.ecommerceplatforms.mapper.CraftsmanAuthMapper;
 import com.yyblcc.ecommerceplatforms.mapper.CraftsmanMapper;
 import com.yyblcc.ecommerceplatforms.mapper.ProductMapper;
 import com.yyblcc.ecommerceplatforms.mapper.WorkShopMapper;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanAuthService;
+import com.yyblcc.ecommerceplatforms.service.CraftsmanEsService;
 import com.yyblcc.ecommerceplatforms.service.CraftsmanService;
 import com.yyblcc.ecommerceplatforms.annotation.UpdateBloomFilter;
-import com.yyblcc.ecommerceplatforms.service.WorkShopService;
 import com.yyblcc.ecommerceplatforms.util.StpKit;
-import com.yyblcc.ecommerceplatforms.util.context.AuthContext;
 import com.yyblcc.ecommerceplatforms.util.redis.AccountLockCheck;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.producer.SendCallback;
+import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -45,8 +46,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-
-import static java.util.stream.Collectors.toList;
 
 /**
  * @author YuYiBlackcat
@@ -63,6 +62,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     private final CraftsmanAuthMapper craftsmanAuthMapper;
     private final WorkShopMapper workShopMapper;
     private final ProductMapper productMapper;
+    private final RocketMQTemplate rocketMQTemplate;
+    private final CraftsmanEsService craftsmanEsService;
 
     /**
      * 匠人注册
@@ -99,6 +100,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
                 //设置最后操作时间
                 .setUpdateTime(LocalDateTime.now());
         save(craftsman);
+        craftsmanEsService.saveOrUpdate(craftsman);
         stringRedisTemplate.keys("craftsman:page:*").forEach(stringRedisTemplate::delete);
         return Result.success("注册成功");
     }
@@ -121,6 +123,18 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         craftsmanMapper.updateById(craftsman);
         Set<String> keys = stringRedisTemplate.keys("craftsman:*");
         keys.forEach(stringRedisTemplate::delete);
+        Integer action = 2;
+        rocketMQTemplate.asyncSend("craftsman-topic", action, new SendCallback() {
+            @Override
+            public void onSuccess(SendResult sendResult) {
+                log.info("注册消息发送成功", sendResult);
+            }
+            @Override
+            public void onException(Throwable throwable) {
+                log.error("注册消息发送失败", throwable);
+            }
+        });
+        craftsmanEsService.saveOrUpdate(exist);
         return Result.success("设置成功");
     }
 
@@ -143,6 +157,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         craftsmanMapper.updateById(craftsman);
         Set<String> keys = stringRedisTemplate.keys("craftsman:*");
         keys.forEach(stringRedisTemplate::delete);
+        craftsmanEsService.saveOrUpdate(craftsman);
         return Result.success("更新成功");
     }
 
@@ -158,6 +173,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
             return Result.error("未找到用户");
         }
         craftsmanMapper.deleteById(id);
+        stringRedisTemplate.keys("craftsman:*").forEach(stringRedisTemplate::delete);
+        craftsmanEsService.deleteById(id);
         return Result.success("删除成功");
     }
 
@@ -184,6 +201,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         }
 
         craftsmanMapper.deleteBatchIds(ids);
+        stringRedisTemplate.keys("craftsman:*").forEach(stringRedisTemplate::delete);
+        ids.forEach(craftsmanEsService::deleteById);
         return Result.success("批量删除成功");
     }
 
@@ -227,6 +246,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         Page<Craftsman> pageList = craftsmanMapper.selectPage(new Page<>(craftsmanQuery.getPage(), craftsmanQuery.getPageSize()),
                 new LambdaQueryWrapper<Craftsman>()
                         .like(craftsmanQuery.getName() != null, Craftsman::getName,craftsmanQuery.getName())
+                        .ne(Craftsman::getId, 9999)
                         .orderByAsc(Craftsman::getCreateTime));
 
         List<CraftsmanVO> craftsmanVOList = pageList.getRecords().stream().map(this::convertToVO).toList();
@@ -447,6 +467,7 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
                         new LambdaQueryWrapper<Craftsman>()
                                 .eq(Craftsman::getReviewStatus, 1)
                                 .like(query.getName() != null, Craftsman::getName, query.getName())
+                                .ne(Craftsman::getId,9999)
                                 .orderByDesc(Craftsman::getCreateTime))
                 .getRecords()
                 .stream().map(this::convertToVO)
@@ -467,6 +488,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
         }).toList();
         return Result.success(productListVOList);
     }
+
+
 
     @Override
     public Result<?> login(LoginDTO loginDTO,HttpServletRequest request) {
@@ -537,7 +560,8 @@ public class CraftsmanServiceImplement extends ServiceImpl<CraftsmanMapper, Craf
     private CraftsmanVO convertToVO(Craftsman craftsman) {
         CraftsmanVO vo = new CraftsmanVO();
         BeanUtils.copyProperties(craftsman, vo);
-        WorkShop workShop = workShopMapper.selectOne(new LambdaQueryWrapper<WorkShop>().eq(WorkShop::getId, craftsman.getWorkshopId()));
+        WorkShop workShop = workShopMapper.selectOne(new LambdaQueryWrapper<WorkShop>()
+                .eq(WorkShop::getId, craftsman.getWorkshopId()));
         vo.setWorkshopName(workShop.getWorkshopName());
         CraftsmanAuth auth = craftsmanAuthMapper.selectOne(new LambdaQueryWrapper<CraftsmanAuth>().eq(CraftsmanAuth::getCraftsmanId, craftsman.getId()));
         log.info("craftsmanAuth: {}", auth);

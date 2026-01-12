@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/workshop")
 @Slf4j
@@ -19,6 +21,13 @@ import org.springframework.web.bind.annotation.*;
 public class WorkShopController {
 
     private final WorkShopService workShopService;
+
+    @PostMapping
+    public Result signUp(@RequestBody @Validated WorkShopDTO workShopDTO){
+        log.info("workShop={}", workShopDTO);
+        Long craftsmanId = StpKit.CRAFTSMAN.getLoginIdAsLong();
+        return workShopService.signUpWorkShop(craftsmanId,workShopDTO);
+    }
 
     /**
      * 修改店铺认证状态
@@ -145,6 +154,12 @@ public class WorkShopController {
     public Result<Boolean> checkCollect(@RequestParam Long workShopId){
         log.info("id={}", workShopId);
         return workShopService.checkCollect(workShopId);
+    }
+
+    @PutMapping("/masterPieces")
+    public Result<?> updateMasterPieces(@RequestBody List<String> masterPieces) {
+        log.info("更新匠人作品: masterPieces={}", masterPieces);
+        return workShopService.updateMasterPieces(masterPieces);
     }
 
 }
