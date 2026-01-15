@@ -46,10 +46,10 @@ public class WorkShopController {
      * @param workshopId
      * @return
      */
-    @PutMapping("/ban-workshop")
-    public Result banWorkshop(@RequestParam("workshopId") Long workshopId){
+    @PutMapping("/status/{id}")
+    public Result adminSetWorkShopStatus(@PathVariable("id") Long workshopId, @RequestParam Integer status){
         log.info("workshopId={}", workshopId);
-        return workShopService.banWorkshop(workshopId);
+        return workShopService.adminSetWorkShopStatus(workshopId,status);
     }
 
     /**

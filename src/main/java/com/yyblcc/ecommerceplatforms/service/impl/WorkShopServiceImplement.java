@@ -64,10 +64,12 @@ public class WorkShopServiceImplement extends ServiceImpl<WorkShopMapper, WorkSh
     }
 
     @Override
-    public Result banWorkshop(Long workshopId) {
-        boolean success = new LambdaUpdateChainWrapper<>(workShopMapper).eq(WorkShop::getId, workshopId).set(WorkShop::getStatus, 0).update();
-        if (success){
-            return Result.success("工作室已被关闭");
+    public Result adminSetWorkShopStatus(Long workshopId, Integer status) {
+        int row = workShopMapper.update(new LambdaUpdateWrapper<WorkShop>()
+                .eq(WorkShop::getId, workshopId)
+                .set(WorkShop::getStatus, status));
+        if (row > 0){
+            return Result.success("工作室状态已更新为：" + status);
         }
         return Result.error("发生错误!");
     }

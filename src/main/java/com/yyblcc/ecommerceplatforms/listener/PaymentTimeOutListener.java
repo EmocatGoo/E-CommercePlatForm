@@ -1,6 +1,8 @@
 package com.yyblcc.ecommerceplatforms.listener;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.yyblcc.ecommerceplatforms.domain.Enum.OrderStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.Enum.PayStatusEnum;
 import com.yyblcc.ecommerceplatforms.domain.po.Order;
 import com.yyblcc.ecommerceplatforms.domain.po.Payment;
@@ -14,6 +16,7 @@ import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @RocketMQMessageListener(
         topic = "payment_time_out",
@@ -25,6 +28,7 @@ import java.time.LocalDateTime;
 public class PaymentTimeOutListener implements RocketMQListener<String> {
     private final PaymentService paymentService;
     private final PaymentMapper paymentMapper;
+    private final OrderMapper orderMapper;
 
     @Override
     public void onMessage(String mergePaySn) {
@@ -33,5 +37,20 @@ public class PaymentTimeOutListener implements RocketMQListener<String> {
         payment.setPayStatus(PayStatusEnum.CANCEL.getCode());
         payment.setExpireTime(LocalDateTime.now());
         paymentMapper.updateById(payment);
+
+        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>().eq(Order::getPaySn, mergePaySn));
+
+        if (!orders.isEmpty()) {
+            for (Order order : orders) {
+                // 使用主键更新，这样可以利用主键索引
+                orderMapper.update(null,new LambdaUpdateWrapper<Order>()
+                        .eq(Order::getOrderSn, order.getOrderSn()) // 使用orderSn(有索引)而不是paySn
+                        .set(Order::getOrderStatus, OrderStatusEnum.CANCEL.getCode())
+                        .set(Order::getPayStatus, PayStatusEnum.CANCEL.getCode())
+                        .set(Order::getCancelReason, "支付超时取消订单")
+                        .set(Order::getCancelTime, LocalDateTime.now())
+                        .last("FOR UPDATE"));
+            }
+        }
     }
 }

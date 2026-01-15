@@ -36,6 +36,8 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.Schedules;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -153,7 +155,7 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
                     .orderCount(orders.size())
                     .payStatus(PayStatusEnum.PENDING.getCode())
                     .createTime(LocalDateTime.now())
-                    .expireTime(LocalDateTime.now().plusMinutes(15))
+                    .expireTime(LocalDateTime.now().plusMinutes(5))
                     .build();
             paymentMapper.insert(payment);
 
@@ -166,13 +168,13 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
             String cacheKey = "order:payment:" + userId;
             Map<String, String> cacheMap = Map.of("mergePaySn", mergePaySn, "qrCodeBase64", qrCodeBase64);
             stringRedisTemplate.opsForHash().putAll(cacheKey, cacheMap);
-            stringRedisTemplate.expire(cacheKey, Duration.ofMinutes(15));
+            stringRedisTemplate.expire(cacheKey, Duration.ofMinutes(5));
 
             log.info("创建支付成功，合并支付单号：{}, 订单数量：{}, 总金额：{}", mergePaySn, orders.size(), totalAmount);
             //发送延时消息，检测是否支付，订单超时未支付则关闭
             rocketMQTemplate.syncSend("payment-timeout-topic",
                     MessageBuilder.withPayload(mergePaySn).build(),
-                    3000,
+                    300000, // 5分钟
                     16);
             return Result.success(PaymentVO.builder()
                     .qrCodeBase64(qrCodeBase64)
@@ -593,6 +595,24 @@ public class PaymentServiceImplement extends ServiceImpl<PaymentMapper, Payment>
         }catch (Exception e){
             log.error("支付宝关闭订单异常：{}", e.getMessage());
             throw new RuntimeException("取消失败",e);
+        }
+    }
+
+    @Scheduled(fixedRate = 1800000) // 30分钟执行一次（30 * 60 * 1000 = 1800000毫秒）
+    private void scanPaymentStatus() {
+        log.info("开始扫描支付状态");
+        List<Payment> payments = paymentMapper.selectList(new LambdaQueryWrapper<Payment>()
+                .eq(Payment::getPayStatus, PayStatusEnum.PENDING.getCode())
+                .lt(Payment::getExpireTime, LocalDateTime.now()));
+        if (!payments.isEmpty()){
+            for (Payment payment : payments){
+                paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
+                        .eq(Payment::getId, payment.getId())
+                        .eq(Payment::getPayStatus, PayStatusEnum.PENDING.getCode())
+                        .lt(Payment::getExpireTime, LocalDateTime.now())
+                        .set(Payment::getPayStatus, PayStatusEnum.CANCEL.getCode())
+                        .last("FOR UPDATE"));
+            }
         }
     }
 

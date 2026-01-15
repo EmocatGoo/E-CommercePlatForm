@@ -13,7 +13,7 @@ import java.util.List;
 public interface WorkShopService extends IService<WorkShop> {
     Result reviewWorkshop(Long workshopId, Integer status);
 
-    Result banWorkshop(Long workshopId);
+    Result adminSetWorkShopStatus(Long workshopId, Integer status);
 
     Result pageWorkShop(PageQuery query);
 

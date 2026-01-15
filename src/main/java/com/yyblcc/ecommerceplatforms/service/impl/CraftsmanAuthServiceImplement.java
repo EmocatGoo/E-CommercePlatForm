@@ -34,8 +34,4 @@ public class CraftsmanAuthServiceImplement extends ServiceImpl<CraftsmanAuthMapp
         return Result.success(pageBean);
     }
 
-
-
-
-
 }
